@@ -21,6 +21,7 @@ pub fn qol_dir() -> PathBuf {
 pub fn tilde(p: &Path) -> String {
     let home = home();
     match p.strip_prefix(&home) {
+        Ok(rest) if rest.as_os_str().is_empty() && home != Path::new("/") => "~".to_string(),
         Ok(rest) if home != Path::new("/") => format!("~/{}", rest.display()),
         _ => p.display().to_string(),
     }

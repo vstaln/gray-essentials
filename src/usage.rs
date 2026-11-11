@@ -25,7 +25,7 @@ pub fn usage_command(argv: &[String]) -> Value {
             json!({"text": "usage: live counters cleared"})
         }
         Some(_) => {
-            json!({"text": "usage: /usage [all|reset] — per-session tokens+cost, live counters, provider balances"})
+            json!({"text": "usage: /cost [all|reset] — per-session tokens+cost, live counters, provider balances"})
         }
     }
 }

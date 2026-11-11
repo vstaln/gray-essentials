@@ -1,7 +1,7 @@
 <p align="center">
   <img src="assets/gray-logo.svg" alt="gray" width="96">
 </p>
-<h1 align="center">gray-qol</h1>
+<h1 align="center">gray-quality-of-life</h1>
 <p align="center">Detect the other agent tools you use, import their setup, and update everything in one go.</p>
 <p align="center">
   <a href="https://github.com/vstaln/gray-qol/blob/main/LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
@@ -37,6 +37,9 @@ A Rust sidecar (lazy spawn, wire 1.1). It implements the plugin side of
 - **`/qol scanned`**: lists every path the detector checked and what it found.
 - **`/qol first-run`**: the welcome screen, then setup for any detected tools,
   then a `connect_picker` outcome.
+- **`/cd [path]`** (alias `/chdir`): change gray's working directory and resume
+  the same conversation there. Bare `/cd` goes home; a target outside the
+  current git worktree asks first.
 - **`/qol update`**: checks `gray update --check`, `gray plugin update --check
   all`, provider CLIs (npm / brew / pipx / uv / the tool's own updater) and
   `host/sessions`. It asks once through `host/ask`, then runs provider CLIs →

@@ -1,3 +1,4 @@
+mod cd;
 mod copy;
 mod detect;
 mod host;
@@ -28,7 +29,9 @@ const USAGE: &str = "/qol setup [tool]   import rules, skills, MCP servers and a
 /qol dismiss <tool> never mention a detected tool again\n\
 /qol scanned        what the detector looked at and found\n\
 /qol update         update provider CLIs, plugins and gray in one go\n\
-/qol first-run      the first-run welcome";
+/qol first-run      the first-run welcome\n\
+\n\
+/cd [path]          change gray's working directory and resume here (alias: /chdir)";
 
 fn manifest() -> Value {
     json!({
@@ -37,12 +40,12 @@ fn manifest() -> Value {
         "protocol": PROTOCOL,
         "description": "Detect other agent tools, import their setup, update everything",
         "tools": [],
-        "commands": [COMMAND, "/setup", "/usage", "/cost", "/copy", "/hotkeys", "/intro"],
-        "turn_local": {"/usage": ["*"], "/cost": ["*"], "/copy": ["*"], "/hotkeys": ["*"], "/intro": ["*"], "/qol": ["scanned"]},
+        "commands": [COMMAND, "/setup", "/cost", "/copy", "/hotkeys", "/intro", "/cd", "/chdir"],
+        "turn_local": {"/cost": ["*"], "/copy": ["*"], "/hotkeys": ["*"], "/intro": ["*"], "/qol": ["scanned"]},
         "hooks": ["session_start", "turn_end"],
         "first_run": true,
         "capabilities": ["host.say", "host.ask", "plugins.manage", "host.sessions", "host.restart"],
-        "completion": ["setup", "undo", "dismiss", "scanned", "update", "first-run"],
+        "completion": ["setup", "undo", "dismiss", "scanned", "update", "first-run", "cd"],
     })
 }
 
@@ -88,10 +91,13 @@ fn command_run(host: &Host, params: &Value) -> Value {
             _ => setup::command(host, words.first().copied()),
         };
     }
+    if name == "/cd" || name == "/chdir" {
+        return cd::command(host, &argv);
+    }
     let session = params["session"]["id"].as_str().unwrap_or("").to_string();
     let words: Vec<&str> = argv.iter().map(String::as_str).collect();
     match name {
-        "/usage" | "/cost" => return usage::usage_command(&argv),
+        "/cost" => return usage::usage_command(&argv),
         "/copy" => return copy::copy_command(&session),
         "/hotkeys" => return hotkeys::hotkeys_command(&argv),
         "/intro" => return intro::intro_command(&argv),
@@ -106,6 +112,7 @@ fn command_run(host: &Host, params: &Value) -> Value {
     match words.as_slice() {
         [] | ["help"] => json!({"text": USAGE}),
         ["setup", rest @ ..] => setup::command(host, rest.first().copied()),
+        ["cd", ..] | ["chdir", ..] => cd::command(host, &argv[1..]),
         ["undo"] => setup::undo(1),
         ["undo", n] => match n.parse::<usize>() {
             Ok(n) if n > 0 => setup::undo(n),
