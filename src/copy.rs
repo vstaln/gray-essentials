@@ -30,7 +30,13 @@ fn last_assistant_text(path: &std::path::Path) -> Option<String> {
     })
 }
 
-fn session_path(sid: &str) -> Option<std::path::PathBuf> {
+pub fn session_path(sid: &str) -> Option<std::path::PathBuf> {
+    let env_sid = std::env::var("GRAY_SESSION_ID").unwrap_or_default();
+    let sid = if sid.is_empty() {
+        env_sid.as_str()
+    } else {
+        sid
+    };
     if !sid.is_empty() {
         let p = gray_home().join("sessions").join(format!("{sid}.jsonl"));
         if p.is_file() {
@@ -46,7 +52,7 @@ fn session_path(sid: &str) -> Option<std::path::PathBuf> {
 }
 
 /// pbcopy / clip / wl-copy / xclip / xsel — first helper found wins.
-fn copy_to_clipboard(text: &str) -> bool {
+pub fn copy_to_clipboard(text: &str) -> bool {
     #[cfg(target_os = "macos")]
     let helpers: &[(&str, &[&str])] = &[("pbcopy", &[])];
     #[cfg(target_os = "windows")]

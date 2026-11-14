@@ -40,6 +40,12 @@ A Rust sidecar (lazy spawn, wire 1.1). It implements the plugin side of
 - **`/cd [path]`** (alias `/chdir`): change gray's working directory and resume
   the same conversation there. Bare `/cd` goes home; a target outside the
   current git worktree asks first.
+- **`/export [md | txt | file]`**: the current session's conversation (every
+  message on the active branch, including what came before a compaction) for
+  carrying the work into another agent harness. Bare `/export` asks: copy to clipboard or save to a file. `clip` copies markdown
+  to the clipboard; `md` / `txt` write `./gray-<session>.md` / `.txt`; a path
+  writes there (`.txt` is plain text, anything else markdown). Tool calls and
+  results are kept but cut to about 2,000 characters each; thinking is left out.
 - **`/qol update`**: checks `gray update --check`, `gray plugin update --check
   all`, provider CLIs (npm / brew / pipx / uv / the tool's own updater) and
   `host/sessions`. It asks once through `host/ask`, then runs provider CLIs →

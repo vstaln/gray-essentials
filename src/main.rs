@@ -1,6 +1,7 @@
 mod cd;
 mod copy;
 mod detect;
+mod export;
 mod host;
 mod hotkeys;
 mod intro;
@@ -40,18 +41,19 @@ fn manifest() -> Value {
         "protocol": PROTOCOL,
         "description": "Detect other agent tools, import their setup, update everything",
         "tools": [],
-        "commands": [COMMAND, "/setup", "/cost", "/copy", "/hotkeys", "/intro", "/cd", "/chdir"],
+        "commands": [COMMAND, "/setup", "/cost", "/copy", "/export", "/hotkeys", "/intro", "/cd", "/chdir"],
         "command_descriptions": {
             "/qol": "detect other agent tools and import their setup",
             "/setup": "import rules, skills and MCP servers from other tools",
             "/cost": "show token usage and cost estimates",
             "/copy": "copy the last reply to the clipboard",
+            "/export": "export the session as markdown or text (clipboard or file)",
             "/hotkeys": "show keybindings and your overrides",
             "/intro": "toggle the logo intro",
             "/cd": "change the working directory and resume here",
             "/chdir": "change the working directory and resume here",
         },
-        "turn_local": {"/cost": ["*"], "/copy": ["*"], "/hotkeys": ["*"], "/intro": ["*"], "/qol": ["scanned"]},
+        "turn_local": {"/cost": ["*"], "/copy": ["*"], "/export": ["*"], "/hotkeys": ["*"], "/intro": ["*"], "/qol": ["scanned"]},
         "hooks": ["session_start", "turn_end"],
         "first_run": true,
         "capabilities": ["host.say", "host.ask", "plugins.manage", "host.sessions", "host.restart"],
@@ -109,6 +111,7 @@ fn command_run(host: &Host, params: &Value) -> Value {
     match name {
         "/cost" => return usage::usage_command(&argv),
         "/copy" => return copy::copy_command(&session),
+        "/export" => return export::export_command(Some(host), &session, &argv),
         "/hotkeys" => return hotkeys::hotkeys_command(&argv),
         "/intro" => return intro::intro_command(&argv),
         _ => {}
@@ -221,6 +224,12 @@ fn main() {
             );
         }
         Some("copy") => println!("{}", copy::copy_command("")["text"].as_str().unwrap_or("")),
+        Some("export") => println!(
+            "{}",
+            export::export_command(None, "", &args[1..])["text"]
+                .as_str()
+                .unwrap_or("")
+        ),
         Some("hotkeys") => println!(
             "{}",
             hotkeys::hotkeys_command(&args[1..].to_vec())["text"]
