@@ -58,7 +58,9 @@ into gray core now lives here, on top of the generic host API core exposes.
 - **Prompt templates**: `*.md` files in `.gray/prompts/` (project, up to the git
   root) and `~/.gray/prompts/` become slash commands, with YAML
   frontmatter (`description`, `argument-hint`) and `$ARGUMENTS`, `$1`,
-  `${@:2}`, `${1:-default}` placeholders.
+  `${@:2}`, `${1:-default}` placeholders. The list is announced with
+  `host/commands_changed`; the host has to re-read the plugin manifest to pick
+  new templates up.
 - **Auto-continue**: after a usage limit, the task resumes on its own when the
   limit resets.
 - **Notify on finish** and **break reminder**: terminal notifications when a
