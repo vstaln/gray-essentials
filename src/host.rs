@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 pub const ASK_TTL: Duration = Duration::from_secs(300);
 pub const HOST_TTL: Duration = Duration::from_secs(25);
 pub const INSTALL_TTL: Duration = Duration::from_secs(600);
+pub const MODEL_TTL: Duration = Duration::from_secs(120);
 
 pub struct Host {
     out: Mutex<std::io::Stdout>,
@@ -87,6 +88,69 @@ impl Host {
         .unwrap_or(false)
     }
 
+    pub fn say_card(&self, text: &str, card: &str) {
+        let _ = self.call("host/say", json!({"text": text, "card": card}), HOST_TTL);
+    }
+
+    pub fn transcript(&self, last: usize) -> Result<Vec<Value>, String> {
+        self.call("host/transcript", json!({"last": last}), HOST_TTL)
+            .map(|v| {
+                v.get("messages")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default()
+            })
+    }
+
+    pub fn complete(&self, system: &str, prompt: &str, max_tokens: u32) -> Option<String> {
+        let v = self
+            .call(
+                "host/complete",
+                json!({"system": system, "prompt": prompt, "max_tokens": max_tokens}),
+                MODEL_TTL,
+            )
+            .ok()?;
+        let text = v.get("text").and_then(Value::as_str)?;
+        (!text.trim().is_empty()).then(|| text.to_string())
+    }
+
+    pub fn session_title(&self, title: &str) -> bool {
+        ok_bool(self.call("host/session_title", json!({"title": title}), HOST_TTL))
+    }
+
+    pub fn inject(&self, text: &str) -> bool {
+        self.call("host/inject", json!({"text": text}), HOST_TTL)
+            .map(|v| v.get("ok").and_then(Value::as_bool).unwrap_or(true))
+            .unwrap_or(false)
+    }
+
+    pub fn ghost(&self, text: &str) -> bool {
+        ok_bool(self.call("host/ghost", json!({"text": text}), HOST_TTL))
+    }
+
+    pub fn link_rules(&self, rules: Value) -> bool {
+        ok_bool(self.call("host/link_rules", json!({"rules": rules}), HOST_TTL))
+    }
+
+    pub fn notify(&self, title: &str, body: &str) -> bool {
+        ok_bool(self.call(
+            "host/notify",
+            json!({"title": title, "body": body}),
+            HOST_TTL,
+        ))
+    }
+
+    pub fn sessions(&self, params: Value) -> Vec<Value> {
+        self.call("host/sessions", params, HOST_TTL)
+            .ok()
+            .and_then(|v| v.get("sessions").and_then(Value::as_array).cloned())
+            .unwrap_or_default()
+    }
+
+    pub fn announce(&self, method: &str) {
+        self.write(&json!({"method": method, "params": {}}));
+    }
+
     pub fn ask(&self, questions: Value) -> Result<Value, String> {
         self.call(
             "host/ask",
@@ -94,6 +158,12 @@ impl Host {
             ASK_TTL,
         )
     }
+}
+
+fn ok_bool(result: Result<Value, String>) -> bool {
+    result
+        .map(|v| v.get("ok").and_then(Value::as_bool).unwrap_or(true))
+        .unwrap_or(false)
 }
 
 pub fn answer_labels(result: &Value, id: &str) -> Option<Vec<String>> {

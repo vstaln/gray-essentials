@@ -109,8 +109,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "gray-qol"
-version = "0.1.3"
+name = "gray-quality-of-life"
+version = "0.2.0"
 dependencies = [
  "crossterm",
  "image",

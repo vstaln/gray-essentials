@@ -1,12 +1,24 @@
+mod auto_continue;
+mod cd;
 mod copy;
 mod detect;
+mod export;
 mod host;
 mod hotkeys;
 mod intro;
+mod links;
+mod notify;
 mod paths;
+mod prompt;
+mod recap;
+mod sessions;
+mod settings;
 mod setup;
 mod sources;
 mod state;
+mod suggest;
+mod templates;
+mod title;
 mod update;
 mod usage;
 
@@ -28,21 +40,83 @@ const USAGE: &str = "/qol setup [tool]   import rules, skills, MCP servers and a
 /qol dismiss <tool> never mention a detected tool again\n\
 /qol scanned        what the detector looked at and found\n\
 /qol update         update provider CLIs, plugins and gray in one go\n\
-/qol first-run      the first-run welcome";
+/qol first-run      the first-run welcome\n\
+/qol sessions dismiss  clear the interrupted-session hint\n\
+\n\
+/cd [path]          change gray's working directory and resume here (alias: /chdir)";
+
+const COMMANDS: &[(&str, &str)] = &[
+    ("/qol", "detect other agent tools and import their setup"),
+    (
+        "/setup",
+        "import rules, skills and MCP servers from other tools",
+    ),
+    ("/cost", "show token usage and cost estimates"),
+    ("/copy", "copy the last reply to the clipboard"),
+    (
+        "/export",
+        "export the session as markdown or text (clipboard or file)",
+    ),
+    ("/hotkeys", "show keybindings and your overrides"),
+    ("/intro", "toggle the logo intro"),
+    ("/cd", "change the working directory and resume here"),
+    ("/chdir", "change the working directory and resume here"),
+];
 
 fn manifest() -> Value {
+    let prompts = templates::list();
+    let mut commands: Vec<String> = COMMANDS
+        .iter()
+        .map(|(name, _)| (*name).to_string())
+        .collect();
+    let mut descriptions = serde_json::Map::new();
+    for (name, description) in COMMANDS {
+        descriptions.insert((*name).to_string(), json!(description));
+    }
+    let mut completion: Vec<String> = [
+        "setup",
+        "undo",
+        "dismiss",
+        "scanned",
+        "update",
+        "first-run",
+        "cd",
+        "sessions",
+    ]
+    .iter()
+    .map(|s| (*s).to_string())
+    .collect();
+    for template in &prompts {
+        let name = format!("/{}", template.name);
+        descriptions.insert(name.clone(), json!(template.description));
+        commands.push(name);
+        completion.push(template.name.clone());
+    }
     json!({
         "name": PLUGIN_NAME,
         "version": env!("CARGO_PKG_VERSION"),
         "protocol": PROTOCOL,
         "description": "Detect other agent tools, import their setup, update everything",
         "tools": [],
-        "commands": [COMMAND, "/setup", "/usage", "/cost", "/copy", "/hotkeys", "/intro"],
-        "turn_local": {"/usage": ["*"], "/cost": ["*"], "/copy": ["*"], "/hotkeys": ["*"], "/intro": ["*"], "/qol": ["scanned"]},
-        "hooks": ["session_start", "turn_end"],
+        "commands": commands,
+        "command_descriptions": descriptions,
+        "turn_local": {"/cost": ["*"], "/copy": ["*"], "/export": ["*"], "/hotkeys": ["*"], "/intro": ["*"], "/qol": ["scanned"]},
+        "hooks": ["session_start", "turn_end", "user_return"],
         "first_run": true,
-        "capabilities": ["host.say", "host.ask", "plugins.manage", "host.sessions", "host.restart"],
-        "completion": ["setup", "undo", "dismiss", "scanned", "update", "first-run"],
+        "capabilities": [
+            "host.say",
+            "host.links",
+            "host.turn",
+            "host.sessions",
+            "session.read",
+            "session.write",
+            "composer.ghost",
+            "plugins.manage",
+            "host.ask",
+            "host.restart",
+        ],
+        "settings": settings::manifest_rows(),
+        "completion": completion,
     })
 }
 
@@ -88,14 +162,22 @@ fn command_run(host: &Host, params: &Value) -> Value {
             _ => setup::command(host, words.first().copied()),
         };
     }
+    if name == "/cd" || name == "/chdir" {
+        return cd::command(host, &argv);
+    }
     let session = params["session"]["id"].as_str().unwrap_or("").to_string();
     let words: Vec<&str> = argv.iter().map(String::as_str).collect();
     match name {
-        "/usage" | "/cost" => return usage::usage_command(&argv),
+        "/cost" => return usage::usage_command(&argv),
         "/copy" => return copy::copy_command(&session),
+        "/export" => return export::export_command(Some(host), &session, &argv),
         "/hotkeys" => return hotkeys::hotkeys_command(&argv),
         "/intro" => return intro::intro_command(&argv),
         _ => {}
+    }
+    let rest = params.get("raw").and_then(Value::as_str).unwrap_or("");
+    if let Some(outcome) = templates::run(&templates::list(), name, rest) {
+        return outcome;
     }
     if name == "/update" {
         return match words.first() {
@@ -106,6 +188,7 @@ fn command_run(host: &Host, params: &Value) -> Value {
     match words.as_slice() {
         [] | ["help"] => json!({"text": USAGE}),
         ["setup", rest @ ..] => setup::command(host, rest.first().copied()),
+        ["cd", ..] | ["chdir", ..] => cd::command(host, &argv[1..]),
         ["undo"] => setup::undo(1),
         ["undo", n] => match n.parse::<usize>() {
             Ok(n) if n > 0 => setup::undo(n),
@@ -116,21 +199,32 @@ fn command_run(host: &Host, params: &Value) -> Value {
         ["scanned"] => detect::scanned_report(),
         ["update", ..] => update::run(host, &session),
         ["first-run"] => setup::first_run(host),
+        ["sessions", "dismiss"] => sessions::dismiss_command(host, params),
+        ["sessions"] => json!({"text": "usage: /qol sessions dismiss"}),
         _ => json!({"text": format!("unknown: /qol {}\n{USAGE}", argv.join(" "))}),
     }
 }
 
-fn on_event(host: &Host, params: &Value) {
+fn on_event(host: &Arc<Host>, params: &Value) {
     match params.get("type").and_then(Value::as_str) {
         Some("session_start") => {
-            if params.get("interactive").and_then(Value::as_bool) == Some(false) {
-                return;
+            templates::session_start(host, params);
+            links::session_start(host, params);
+            if prompt::interactive(params) {
+                sessions::session_start(host, params);
+                detect::notify(host);
             }
-            detect::notify(host);
         }
+        Some("user_return") => recap::user_return(host, params),
         Some("turn_end") => {
-            let sid = params["session"]["id"].as_str().unwrap_or("");
-            usage::record_turn(sid, &params["usage"]);
+            usage::record_turn(&prompt::session_id(params), &params["usage"]);
+            auto_continue::turn_end(host, params);
+            notify::turn_end(host, params);
+            for worker in [title::turn_end, suggest::turn_end] {
+                let host = Arc::clone(host);
+                let params = params.clone();
+                let _ = std::thread::spawn(move || worker(&host, &params));
+            }
         }
         _ => {}
     }
@@ -198,21 +292,27 @@ fn main() {
             let _ = args;
             println!(
                 "{}",
-                usage::usage_command(&args[1..].to_vec())["text"]
+                usage::usage_command(&args[1..])["text"]
                     .as_str()
                     .unwrap_or("")
             );
         }
         Some("copy") => println!("{}", copy::copy_command("")["text"].as_str().unwrap_or("")),
+        Some("export") => println!(
+            "{}",
+            export::export_command(None, "", &args[1..])["text"]
+                .as_str()
+                .unwrap_or("")
+        ),
         Some("hotkeys") => println!(
             "{}",
-            hotkeys::hotkeys_command(&args[1..].to_vec())["text"]
+            hotkeys::hotkeys_command(&args[1..])["text"]
                 .as_str()
                 .unwrap_or("")
         ),
         Some("intro") => println!(
             "{}",
-            intro::intro_command(&args[1..].to_vec())["text"]
+            intro::intro_command(&args[1..])["text"]
                 .as_str()
                 .unwrap_or("")
         ),

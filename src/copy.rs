@@ -20,17 +20,21 @@ fn last_assistant_text(path: &std::path::Path) -> Option<String> {
         let text: String = v["message"]["content"]
             .as_array()?
             .iter()
-            .filter_map(|b| {
-                (b["type"].as_str() == Some("text"))
-                    .then(|| b["text"].as_str().unwrap_or("").to_string())
-            })
+            .filter(|b| b["type"].as_str() == Some("text"))
+            .map(|b| b["text"].as_str().unwrap_or("").to_string())
             .collect::<Vec<_>>()
             .join("\n");
         (!text.trim().is_empty()).then(|| text.trim().to_string())
     })
 }
 
-fn session_path(sid: &str) -> Option<std::path::PathBuf> {
+pub fn session_path(sid: &str) -> Option<std::path::PathBuf> {
+    let env_sid = std::env::var("GRAY_SESSION_ID").unwrap_or_default();
+    let sid = if sid.is_empty() {
+        env_sid.as_str()
+    } else {
+        sid
+    };
     if !sid.is_empty() {
         let p = gray_home().join("sessions").join(format!("{sid}.jsonl"));
         if p.is_file() {
@@ -46,7 +50,7 @@ fn session_path(sid: &str) -> Option<std::path::PathBuf> {
 }
 
 /// pbcopy / clip / wl-copy / xclip / xsel — first helper found wins.
-fn copy_to_clipboard(text: &str) -> bool {
+pub fn copy_to_clipboard(text: &str) -> bool {
     #[cfg(target_os = "macos")]
     let helpers: &[(&str, &[&str])] = &[("pbcopy", &[])];
     #[cfg(target_os = "windows")]
