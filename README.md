@@ -68,7 +68,9 @@ into gray core now lives here, on top of the generic host API core exposes.
 - **Session cleanup**: sessions idle past the configured period are deleted,
   at most once a day.
 - **Interrupted hint**: a home row when this directory has interrupted
-  sessions, cleared with `/qol sessions dismiss`.
+  sessions, cleared with `/qol sessions dismiss`. Press `i` in the `/qol`
+  panel to hide it for good (or show it again); the choice is saved and
+  running sessions follow it at their next turn.
 - **`/settings` rows** for all of the above (away recap, suggestions, auto
   titles, issue links, session cleanup, auto-continue, notify on finish, break
   reminder) — labels and defaults match what core used to ship.

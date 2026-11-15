@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Duration;
 
 use serde_json::{Value, json};
@@ -7,6 +8,9 @@ use crate::host::Host;
 use crate::paths;
 use crate::prompt;
 use crate::settings;
+use crate::state::State;
+
+static APPLIED: AtomicU8 = AtomicU8::new(0);
 
 const PRUNE_STAMP: &str = ".last-prune";
 const SIDECARS: [&str; 4] = ["dismissed", "title", "autotitle", "prefix"];
@@ -32,7 +36,34 @@ pub fn session_start(host: &Host, params: &Value) {
         return;
     }
     cleanup(host);
-    hint(host, params);
+    refresh(host, params);
+}
+
+pub fn shown() -> bool {
+    !State::load().hide_interrupted
+}
+
+pub fn refresh(host: &Host, params: &Value) {
+    if !prompt::interactive(params) {
+        return;
+    }
+    let shown = shown();
+    let want = if shown { 1 } else { 2 };
+    if APPLIED.swap(want, Ordering::SeqCst) == want {
+        return;
+    }
+    if shown {
+        hint(host, params);
+    } else {
+        host.notice("", "", "home", "qol.interrupted");
+    }
+}
+
+pub fn toggle(host: &Host, params: &Value) {
+    let mut state = State::load();
+    state.hide_interrupted = !state.hide_interrupted;
+    let _ = state.save();
+    refresh(host, params);
 }
 
 fn cleanup(host: &Host) {
@@ -99,6 +130,9 @@ fn interrupted_here(host: &Host, cwd: &Path) -> Vec<String> {
 }
 
 pub fn interrupted_count(host: &Host, params: &Value) -> usize {
+    if !shown() {
+        return 0;
+    }
     prompt::cwd(params)
         .map(|cwd| interrupted_here(host, &cwd).len())
         .unwrap_or(0)
@@ -121,6 +155,9 @@ fn hint(host: &Host, params: &Value) {
 }
 
 pub fn dismiss_command(host: &Host, params: &Value) -> Value {
+    if !shown() {
+        return json!({"text": "interrupted sessions are hidden (i in /qol shows them)"});
+    }
     let Some(cwd) = prompt::cwd(params) else {
         return json!({"text": "no session directory"});
     };
