@@ -8,6 +8,7 @@ mod hotkeys;
 mod intro;
 mod links;
 mod notify;
+mod panel;
 mod paths;
 mod prompt;
 mod recap;
@@ -35,7 +36,8 @@ pub const COMMAND: &str = "/qol";
 
 pub const WELCOME: &str = "Welcome to gray by alignment\ngray is a minimal agent that runs tools, edits code, and works with any model provider.";
 
-const USAGE: &str = "/qol setup [tool]   import rules, skills, MCP servers and a subscription plugin\n\
+const USAGE: &str = "/qol               interrupted sessions, detected tools, updates\n\
+/qol setup [tool]   import rules, skills, MCP servers and a subscription plugin\n\
 /qol undo [n]       revert the last n imports (default 1)\n\
 /qol dismiss <tool> never mention a detected tool again\n\
 /qol scanned        what the detector looked at and found\n\
@@ -186,7 +188,9 @@ fn command_run(host: &Host, params: &Value) -> Value {
         };
     }
     match words.as_slice() {
-        [] | ["help"] => json!({"text": USAGE}),
+        [] => panel::open(host, params),
+        ["--pick", pick] => panel::pick(host, params, &session, pick),
+        ["help"] => json!({"text": USAGE}),
         ["setup", rest @ ..] => setup::command(host, rest.first().copied()),
         ["cd", ..] | ["chdir", ..] => cd::command(host, &argv[1..]),
         ["undo"] => setup::undo(1),
@@ -213,6 +217,8 @@ fn on_event(host: &Arc<Host>, params: &Value) {
             if prompt::interactive(params) {
                 sessions::session_start(host, params);
                 detect::notify(host);
+                let host = Arc::clone(host);
+                let _ = std::thread::spawn(move || update::notify(&host));
             }
         }
         Some("user_return") => recap::user_return(host, params),
