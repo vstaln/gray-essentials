@@ -60,6 +60,8 @@ pub struct State {
     pub imports: Vec<Import>,
     #[serde(default)]
     pub last_scan_ms: Option<f64>,
+    #[serde(default)]
+    pub hide_interrupted: bool,
 }
 
 pub fn path() -> PathBuf {

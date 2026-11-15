@@ -43,7 +43,7 @@ const USAGE: &str = "/qol               interrupted sessions, detected tools, up
 /qol scanned        what the detector looked at and found\n\
 /qol update         update provider CLIs, plugins and gray in one go\n\
 /qol first-run      the first-run welcome\n\
-/qol sessions dismiss  clear the interrupted-session hint\n\
+/qol sessions dismiss  clear the interrupted-session hint (i in /qol hides it for good)\n\
 \n\
 /cd [path]          change gray's working directory and resume here (alias: /chdir)";
 
@@ -221,9 +221,13 @@ fn on_event(host: &Arc<Host>, params: &Value) {
                 let _ = std::thread::spawn(move || update::notify(&host));
             }
         }
-        Some("user_return") => recap::user_return(host, params),
+        Some("user_return") => {
+            sessions::refresh(host, params);
+            recap::user_return(host, params);
+        }
         Some("turn_end") => {
             usage::record_turn(&prompt::session_id(params), &params["usage"]);
+            sessions::refresh(host, params);
             auto_continue::turn_end(host, params);
             notify::turn_end(host, params);
             for worker in [title::turn_end, suggest::turn_end] {

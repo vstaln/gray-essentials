@@ -8,11 +8,18 @@ use crate::{sessions, setup, sources, update};
 const ARROW: &str = " \u{203a}";
 
 pub fn open(host: &Host, params: &Value) -> Value {
+    sessions::refresh(host, params);
     let state = State::load();
     let mut items: Vec<Value> = Vec::new();
     let mut push = |id: String, label: &str, value: String| {
         items.push(json!({"id": id, "label": label, "description": value}));
     };
+    let shown = !state.hide_interrupted;
+    push(
+        "interrupted".into(),
+        "Interrupted sessions",
+        if shown { "\u{2713} shown" } else { "hidden" }.to_string(),
+    );
     let interrupted = sessions::interrupted_count(host, params);
     if interrupted > 0 {
         push(
@@ -45,7 +52,9 @@ pub fn open(host: &Host, params: &Value) -> Value {
         "title": "Quality of life",
         "items": items,
         "enter": "open",
-        "keys": [{"key": "d", "label": "dismiss"}, {"key": "u", "label": "undo"}],
+        "keys": [{"key": "d", "label": "dismiss"}, {"key": "u", "label": "undo"},
+            {"key": "i", "label": "show/hide interrupted"},
+        ],
     }})
 }
 
@@ -55,8 +64,14 @@ pub fn pick(host: &Host, params: &Value, session: &str, pick: &str) -> Value {
         _ => (pick, ""),
     };
     match (id, key) {
-        ("sessions", "") => json!({"slash": "/sessions", "text": "/sessions to pick one up"}),
-        ("sessions", "d") => sessions::dismiss_command(host, params),
+        (_, "i") | ("interrupted", "") => {
+            sessions::toggle(host, params);
+            open(host, params)
+        }
+        ("sessions", "") if sessions::shown() => {
+            json!({"slash": "/sessions", "text": "/sessions to pick one up"})
+        }
+        ("sessions", "d") if sessions::shown() => sessions::dismiss_command(host, params),
         ("update", "") => update::run(host, session),
         ("help", _) => json!({"text": crate::USAGE}),
         (id, key) if id.starts_with("tool.") => tool(host, &id[5..], key),
