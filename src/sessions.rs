@@ -114,7 +114,7 @@ fn hint(host: &Host, params: &Value) {
     }
     host.notice(
         &format!("\u{26a0} {n} interrupted"),
-        "",
+        "/sessions",
         "home",
         "qol.interrupted",
     );
@@ -132,6 +132,9 @@ pub fn dismiss_command(host: &Host, params: &Value) -> Value {
         {
             dismissed += 1;
         }
+    }
+    if dismissed > 0 {
+        host.notice("", "", "home", "qol.interrupted");
     }
     let plural = if dismissed == 1 { "" } else { "s" };
     json!({"text": format!("dismissed {dismissed} interrupted session{plural}")})

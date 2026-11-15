@@ -392,17 +392,103 @@ struct GrayCheck {
     ok: bool,
 }
 
+fn newer(a: &str, b: &str) -> bool {
+    let parts = |v: &str| -> Vec<u64> {
+        v.split(['.', '-'])
+            .map_while(|p| p.parse::<u64>().ok())
+            .collect()
+    };
+    parts(a) > parts(b)
+}
+
+fn latest_gray() -> Out {
+    let base = std::env::var("GRAY_CDN_URL")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "https://gray.alignment.id/dl".to_string());
+    run_cmd(
+        &sv(&[
+            "curl",
+            "-fsS",
+            "-m",
+            "8",
+            &format!("{base}/latest-stable.txt"),
+        ]),
+        CHECK_TTL,
+    )
+}
+
 fn gray_check() -> GrayCheck {
-    let out = run_cmd(&sv(&[&paths::gray_bin(), "update", "--check"]), CHECK_TTL);
-    let line = first_line(&out.text);
-    let l = line.to_ascii_lowercase();
-    let available = out.ok
-        && (l.contains("available") || line.contains('→') || l.contains("->"))
-        && !l.contains("up to date");
-    GrayCheck {
-        line,
-        available,
-        ok: out.ok,
+    let installed = run_cmd(&sv(&[&paths::gray_bin(), "--version"]), CHECK_TTL);
+    let latest = latest_gray();
+    let cur = version_token(&first_line(&installed.text));
+    let new = version_token(&first_line(&latest.text));
+    match (installed.ok && latest.ok, cur, new) {
+        (true, Some(cur), Some(new)) => GrayCheck {
+            available: newer(&new, &cur),
+            line: if newer(&new, &cur) {
+                format!("{new} available (installed {cur})")
+            } else {
+                format!("{cur} up to date")
+            },
+            ok: true,
+        },
+        _ => GrayCheck {
+            line: first_line(if latest.ok {
+                &installed.text
+            } else {
+                &latest.text
+            }),
+            available: false,
+            ok: false,
+        },
+    }
+}
+
+fn check_path() -> PathBuf {
+    paths::qol_dir().join("update-check.json")
+}
+
+fn save_check(g: &GrayCheck) -> Option<String> {
+    let ready = g.available.then(|| version_token(&g.line)).flatten();
+    let _ = paths::write_atomic(
+        &check_path(),
+        &json!({"at": paths::now(), "ready": ready}).to_string(),
+    );
+    ready
+}
+
+pub fn ready_version() -> Option<String> {
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(check_path()).ok()?).ok()?;
+    v.get("ready").and_then(Value::as_str).map(str::to_string)
+}
+
+pub fn notify(host: &Host) {
+    let cached: Option<Value> = std::fs::read_to_string(check_path())
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .filter(|v: &Value| {
+            v.get("at")
+                .and_then(Value::as_u64)
+                .is_some_and(|at| paths::now().saturating_sub(at) < 6 * 3600)
+        });
+    let ready = match cached {
+        Some(v) => v.get("ready").and_then(Value::as_str).map(str::to_string),
+        None => {
+            let g = gray_check();
+            if !g.ok {
+                return;
+            }
+            save_check(&g)
+        }
+    };
+    if let Some(v) = ready {
+        host.notice(
+            &format!("\u{2726} {v} ready"),
+            "/qol update",
+            "home",
+            "qol.update",
+        );
     }
 }
 
@@ -556,6 +642,9 @@ fn run_inner(up: &dyn Up) -> Value {
         available: false,
         ok: false,
     });
+    if gray.ok {
+        save_check(&gray);
+    }
     let (plugin_rows, plugin_err) = plugins.join().unwrap_or_default();
     let clis: Vec<Cli> = clis
         .into_iter()
@@ -724,6 +813,7 @@ fn run_inner(up: &dyn Up) -> Value {
         let out = run_cmd(&sv(&[&paths::gray_bin(), "update"]), UPDATE_TTL);
         log(&logp, "gray update", &out);
         if out.ok {
+            let _ = std::fs::remove_file(check_path());
             results.push(match version_token(&gray.line) {
                 Some(v) => format!("✓ gray: updated to {v}"),
                 None => "✓ gray: updated".to_string(),

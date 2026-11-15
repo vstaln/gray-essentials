@@ -708,8 +708,30 @@ fn revert_import(imp: &Import, out: &mut Vec<String>) {
     }
 }
 
-pub fn pending_count(tool: &'static ToolDef) -> usize {
-    gather(&[tool], true).0.len()
+pub fn pending_label(tool: &'static ToolDef) -> Option<String> {
+    let items = gather(&[tool], true).0;
+    let skills: usize = items
+        .iter()
+        .map(|i| match &i.kind {
+            Kind::Skills { links } => links.len(),
+            _ => 0,
+        })
+        .sum();
+    let others = items
+        .iter()
+        .filter(|i| !matches!(i.kind, Kind::Skills { .. }))
+        .count();
+    let plural = |n: usize, w: &str| format!("{n} {w}{}", if n == 1 { "" } else { "s" });
+    match (others, skills) {
+        (0, 0) => None,
+        (0, s) => Some(format!("{} to import", plural(s, "skill"))),
+        (o, 0) => Some(format!("{} to import", plural(o, "item"))),
+        (o, s) => Some(format!(
+            "{} + {} to import",
+            plural(o, "item"),
+            plural(s, "skill")
+        )),
+    }
 }
 
 pub fn import_summary(tool: &str) -> Option<(u64, String)> {

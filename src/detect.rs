@@ -190,7 +190,7 @@ pub fn notify(host: &Host) {
         let id = notice_id(&fresh.iter().map(|t| t.id).collect::<Vec<_>>().join("+"));
         let n = fresh.len();
         let text = format!("{n} new tool{}", if n == 1 { "" } else { "s" });
-        if host.notice(&text, "", "home", &id) {
+        if host.notice(&text, "/qol", "home", &id) {
             for t in &fresh {
                 state.notified.insert(notice_id(t.id));
             }
