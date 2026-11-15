@@ -187,16 +187,10 @@ pub fn notify(host: &Host) {
         })
         .collect();
     if !fresh.is_empty() {
-        let names: Vec<&str> = fresh.iter().map(|t| t.name).collect();
-        let (action, id) = match fresh.as_slice() {
-            [one] => (format!("/qol setup {}", one.id), notice_id(one.id)),
-            many => (
-                "/qol setup".to_string(),
-                notice_id(&many.iter().map(|t| t.id).collect::<Vec<_>>().join("+")),
-            ),
-        };
-        let text = format!("{} detected", names.join(", "));
-        if host.notice(&text, &action, "home", &id) {
+        let id = notice_id(&fresh.iter().map(|t| t.id).collect::<Vec<_>>().join("+"));
+        let n = fresh.len();
+        let text = format!("{n} new tool{}", if n == 1 { "" } else { "s" });
+        if host.notice(&text, "", "home", &id) {
             for t in &fresh {
                 state.notified.insert(notice_id(t.id));
             }

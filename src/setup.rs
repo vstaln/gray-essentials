@@ -689,6 +689,66 @@ fn revert(a: &Action) -> Result<String, String> {
     }
 }
 
+fn revert_import(imp: &Import, out: &mut Vec<String>) {
+    out.push(format!(
+        "undo import #{} ({})",
+        imp.id,
+        imp.tools.join(", ")
+    ));
+    let mut links = 0;
+    for a in imp.actions.iter().rev() {
+        match revert(a) {
+            Ok(_) if matches!(a, Action::Symlink { .. }) => links += 1,
+            Ok(msg) => out.push(format!("  ✓ {msg}")),
+            Err(msg) => out.push(format!("  ✗ {msg}")),
+        }
+    }
+    if links > 0 {
+        out.push(format!("  ✓ {links} skill symlinks removed"));
+    }
+}
+
+pub fn pending_count(tool: &'static ToolDef) -> usize {
+    gather(&[tool], true).0.len()
+}
+
+pub fn import_summary(tool: &str) -> Option<(u64, String)> {
+    let state = State::load();
+    let imp = state
+        .imports
+        .iter()
+        .rev()
+        .find(|i| i.tools.iter().any(|t| t == tool))?;
+    let mut parts = Vec::new();
+    let mut skills = 0;
+    for a in &imp.actions {
+        match a {
+            Action::Rules { path, .. } => parts.push(format!("rules → {}", paths::tilde(path))),
+            Action::Symlink { .. } | Action::Copy { .. } => skills += 1,
+            Action::Mcp { names, .. } => parts.push(format!("MCP: {}", names.join(", "))),
+            Action::Plugin { spec } => parts.push(format!("plugin {spec}")),
+        }
+    }
+    if skills > 0 {
+        parts.push(format!("{skills} skills"));
+    }
+    Some((imp.id, parts.join(" · ")))
+}
+
+pub fn undo_import(id: u64) -> Value {
+    let mut state = State::load();
+    let Some(pos) = state.imports.iter().position(|i| i.id == id) else {
+        return json!({"text": format!("import #{id} not found")});
+    };
+    let imp = state.imports.remove(pos);
+    let mut out = Vec::new();
+    revert_import(&imp, &mut out);
+    if let Err(e) = state.save() {
+        out.push(format!("✗ state: {e}"));
+    }
+    json!({"text": out.join("\n")})
+}
+
 pub fn undo(n: usize) -> Value {
     let mut state = State::load();
     if state.imports.is_empty() {
@@ -699,22 +759,7 @@ pub fn undo(n: usize) -> Value {
         let Some(imp) = state.imports.pop() else {
             break;
         };
-        out.push(format!(
-            "undo import #{} ({})",
-            imp.id,
-            imp.tools.join(", ")
-        ));
-        let mut links = 0;
-        for a in imp.actions.iter().rev() {
-            match revert(a) {
-                Ok(_) if matches!(a, Action::Symlink { .. }) => links += 1,
-                Ok(msg) => out.push(format!("  ✓ {msg}")),
-                Err(msg) => out.push(format!("  ✗ {msg}")),
-            }
-        }
-        if links > 0 {
-            out.push(format!("  ✓ {links} skill symlinks removed"));
-        }
+        revert_import(&imp, &mut out);
     }
     if let Err(e) = state.save() {
         out.push(format!("✗ state: {e}"));

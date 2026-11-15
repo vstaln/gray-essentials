@@ -8,6 +8,7 @@ mod hotkeys;
 mod intro;
 mod links;
 mod notify;
+mod panel;
 mod paths;
 mod prompt;
 mod recap;
@@ -186,7 +187,8 @@ fn command_run(host: &Host, params: &Value) -> Value {
         };
     }
     match words.as_slice() {
-        [] | ["help"] => json!({"text": USAGE}),
+        [] => panel::open(host, params, &session),
+        ["help"] => json!({"text": USAGE}),
         ["setup", rest @ ..] => setup::command(host, rest.first().copied()),
         ["cd", ..] | ["chdir", ..] => cd::command(host, &argv[1..]),
         ["undo"] => setup::undo(1),

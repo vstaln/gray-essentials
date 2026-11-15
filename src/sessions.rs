@@ -98,6 +98,12 @@ fn interrupted_here(host: &Host, cwd: &Path) -> Vec<String> {
         .collect()
 }
 
+pub fn interrupted_count(host: &Host, params: &Value) -> usize {
+    prompt::cwd(params)
+        .map(|cwd| interrupted_here(host, &cwd).len())
+        .unwrap_or(0)
+}
+
 fn hint(host: &Host, params: &Value) {
     let Some(cwd) = prompt::cwd(params) else {
         return;
@@ -106,9 +112,8 @@ fn hint(host: &Host, params: &Value) {
     if n == 0 {
         return;
     }
-    let noun = if n == 1 { "session" } else { "sessions" };
     host.notice(
-        &format!("\u{26a0} {n} interrupted {noun} in {}", paths::tilde(&cwd)),
+        &format!("\u{26a0} {n} interrupted"),
         "",
         "home",
         "qol.interrupted",
