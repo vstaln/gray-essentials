@@ -105,6 +105,7 @@ fn manifest() -> Value {
         "first_run": true,
         "capabilities": [
             "host.say",
+            "host.links",
             "host.turn",
             "host.sessions",
             "session.read",
