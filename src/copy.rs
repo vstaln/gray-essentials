@@ -20,10 +20,8 @@ fn last_assistant_text(path: &std::path::Path) -> Option<String> {
         let text: String = v["message"]["content"]
             .as_array()?
             .iter()
-            .filter_map(|b| {
-                (b["type"].as_str() == Some("text"))
-                    .then(|| b["text"].as_str().unwrap_or("").to_string())
-            })
+            .filter(|b| b["type"].as_str() == Some("text"))
+            .map(|b| b["text"].as_str().unwrap_or("").to_string())
             .collect::<Vec<_>>()
             .join("\n");
         (!text.trim().is_empty()).then(|| text.trim().to_string())

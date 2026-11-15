@@ -19,7 +19,7 @@ fn cfg_path() -> PathBuf {
 /// `/usage` + `/cost` — same report.
 pub fn usage_command(argv: &[String]) -> Value {
     match argv.first().map(|s| s.as_str()) {
-        Some("all") | None => json!({"text": report(argv.first().is_some())}),
+        Some("all") | None => json!({"text": report(!argv.is_empty())}),
         Some("reset") => {
             let _ = std::fs::remove_dir_all(gray_home().join("usage").join("live"));
             json!({"text": "usage: live counters cleared"})
@@ -282,7 +282,7 @@ fn live_rows() -> Vec<(String, Live)> {
             }
         }
     }
-    out.sort_by(|a, b| b.1.turns.cmp(&a.1.turns));
+    out.sort_by_key(|(_, s)| std::cmp::Reverse(s.turns));
     out
 }
 
@@ -311,15 +311,14 @@ fn balance_map() -> Vec<(String, Balance)> {
     .unwrap_or_default()
     .into_iter()
     .collect();
-    if let Ok(raw) = std::fs::read_to_string(cfg_path()) {
-        if let Ok(v) = serde_json::from_str::<Value>(&raw) {
-            if let Some(m) = v["providers"].as_object() {
-                for (k, b) in m {
-                    if let Ok(b) = serde_json::from_value::<Balance>(b.clone()) {
-                        map.retain(|(n, _)| n != k);
-                        map.push((k.clone(), b));
-                    }
-                }
+    if let Ok(raw) = std::fs::read_to_string(cfg_path())
+        && let Ok(v) = serde_json::from_str::<Value>(&raw)
+        && let Some(m) = v["providers"].as_object()
+    {
+        for (k, b) in m {
+            if let Ok(b) = serde_json::from_value::<Balance>(b.clone()) {
+                map.retain(|(n, _)| n != k);
+                map.push((k.clone(), b));
             }
         }
     }
@@ -327,12 +326,11 @@ fn balance_map() -> Vec<(String, Balance)> {
 }
 
 fn auth_token(b: &Balance) -> Option<String> {
-    if !b.auth_env.is_empty() {
-        if let Ok(t) = std::env::var(&b.auth_env) {
-            if !t.trim().is_empty() {
-                return Some(t);
-            }
-        }
+    if !b.auth_env.is_empty()
+        && let Ok(t) = std::env::var(&b.auth_env)
+        && !t.trim().is_empty()
+    {
+        return Some(t);
     }
     if !b.auth_key.is_empty() {
         let raw = std::fs::read_to_string(gray_home().join("auth.json")).ok()?;

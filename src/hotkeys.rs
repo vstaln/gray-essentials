@@ -111,7 +111,9 @@ const DEFAULTS: &[(&str, &str, &[&str])] = &[
     ("tui.yank", "Yank back the last cleared draft", &["ctrl+y"]),
 ];
 
-fn overrides() -> (BTreeMap<String, Vec<String>>, Vec<(String, String)>) {
+type Overrides = (BTreeMap<String, Vec<String>>, Vec<(String, String)>);
+
+fn overrides() -> Overrides {
     let Ok(raw) = std::fs::read_to_string(gray_home().join("keybindings.json")) else {
         return (BTreeMap::new(), Vec::new());
     };

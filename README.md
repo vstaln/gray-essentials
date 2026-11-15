@@ -10,7 +10,8 @@
 </p>
 
 A Rust sidecar (lazy spawn, wire 1.1). It implements the plugin side of
-`GRAY-QOL-CONTRACT.md` v1.
+`GRAY-QOL-CONTRACT.md` v2: everything that used to be a convenience hard-wired
+into gray core now lives here, on top of the generic host API core exposes.
 
 ## What it does
 
@@ -46,6 +47,29 @@ A Rust sidecar (lazy spawn, wire 1.1). It implements the plugin side of
   to the clipboard; `md` / `txt` write `./gray-<session>.md` / `.txt`; a path
   writes there (`.txt` is plain text, anything else markdown). Tool calls and
   results are kept but cut to about 2,000 characters each; thinking is left out.
+- **Away recap** (`user_return`, 3 min away): one sentence on what you were
+  doing last, as a `Recap` card. Skipped when the transcript has not changed
+  since the last one.
+- **Prompt suggestions**: after a turn, the likely next message appears as
+  ghost text in the composer; Enter on an empty line accepts it.
+- **Automatic session titles**: the first answered turn names the session.
+- **Issue links**: `#123` in a reply becomes a link to the repo's issue or PR
+  (from `git remote get-url origin`).
+- **Prompt templates**: `*.md` files in `.gray/prompts/` (project, up to the git
+  root) and `~/.gray/prompts/` become slash commands, with YAML
+  frontmatter (`description`, `argument-hint`) and `$ARGUMENTS`, `$1`,
+  `${@:2}`, `${1:-default}` placeholders.
+- **Auto-continue**: after a usage limit, the task resumes on its own when the
+  limit resets.
+- **Notify on finish** and **break reminder**: terminal notifications when a
+  turn ends, and after a long working streak.
+- **Session cleanup**: sessions idle past the configured period are deleted,
+  at most once a day.
+- **Interrupted hint**: a home row when this directory has interrupted
+  sessions, cleared with `/qol sessions dismiss`.
+- **`/settings` rows** for all of the above (away recap, suggestions, auto
+  titles, issue links, session cleanup, auto-continue, notify on finish, break
+  reminder) — labels and defaults match what core used to ship.
 - **`/qol update`**: checks `gray update --check`, `gray plugin update --check
   all`, provider CLIs (npm / brew / pipx / uv / the tool's own updater) and
   `host/sessions`. It asks once through `host/ask`, then runs provider CLIs →
