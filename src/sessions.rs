@@ -51,7 +51,7 @@ fn cleanup(host: &Host) {
     }
     let _ = std::fs::write(&stamp, b"");
     let cutoff = paths::now().saturating_sub(u64::from(days) * 86_400);
-    for session in host.sessions() {
+    for session in host.sessions(json!({"limit": 1000})) {
         if session.get("running").and_then(Value::as_bool) == Some(true) {
             continue;
         }
@@ -81,7 +81,7 @@ fn remove(root: &Path, id: &str) {
 
 fn interrupted_here(host: &Host, cwd: &Path) -> Vec<String> {
     let here = canonical(cwd);
-    host.sessions()
+    host.sessions(json!({}))
         .into_iter()
         .filter(|s| {
             s.get("running").and_then(Value::as_bool) != Some(true)

@@ -140,8 +140,8 @@ impl Host {
         ))
     }
 
-    pub fn sessions(&self) -> Vec<Value> {
-        self.call("host/sessions", json!({}), HOST_TTL)
+    pub fn sessions(&self, params: Value) -> Vec<Value> {
+        self.call("host/sessions", params, HOST_TTL)
             .ok()
             .and_then(|v| v.get("sessions").and_then(Value::as_array).cloned())
             .unwrap_or_default()
