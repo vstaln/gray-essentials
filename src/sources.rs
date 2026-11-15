@@ -39,6 +39,7 @@ pub fn sub_plugin(tool: &str) -> Option<SubPlugin> {
         "codex" => ("codex", &["codex", "codex-sub"]),
         "opencode" => ("opencode-sub", &["opencode", "opencode-sub"]),
         "devin" => ("devin", &["devin", "devin-sub"]),
+        "cursor" => ("cursor-sub", &["cursor", "cursor-sub"]),
         _ => return None,
     };
     Some(SubPlugin { spec, lock_names })

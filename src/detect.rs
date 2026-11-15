@@ -168,6 +168,8 @@ pub fn imported(state: &State, tool: &str) -> bool {
         .imports
         .iter()
         .any(|i| i.tools.iter().any(|t| t == tool))
+        || crate::sources::sub_plugin(tool)
+            .is_some_and(|sub| crate::sources::plugin_installed(sub.lock_names))
 }
 
 pub fn notify(host: &Host) {
