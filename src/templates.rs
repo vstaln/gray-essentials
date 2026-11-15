@@ -11,7 +11,6 @@ use crate::prompt;
 pub struct Template {
     pub name: String,
     pub description: String,
-    pub argument_hint: Option<String>,
     pub content: String,
 }
 
@@ -132,7 +131,6 @@ fn valid_name(name: &str) -> bool {
 #[derive(Default)]
 struct Frontmatter {
     description: Option<String>,
-    argument_hint: Option<String>,
 }
 
 fn parse_frontmatter(content: &str) -> Option<(Frontmatter, String)> {
@@ -189,10 +187,8 @@ fn parse_fields(block: &str) -> Frontmatter {
         {
             val = val[1..val.len() - 1].to_string();
         }
-        match key.trim().trim_matches(['"', '\'']) {
-            "description" => fm.description = Some(val),
-            "argument-hint" | "argument_hint" => fm.argument_hint = Some(val),
-            _ => {}
+        if key.trim().trim_matches(['"', '\'']) == "description" {
+            fm.description = Some(val);
         }
     }
     fm
@@ -220,7 +216,6 @@ fn load_template(path: &Path) -> Option<Template> {
     Some(Template {
         name,
         description,
-        argument_hint: fm.argument_hint.filter(|h| !h.trim().is_empty()),
         content: body,
     })
 }

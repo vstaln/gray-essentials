@@ -65,10 +65,14 @@ const COMMANDS: &[(&str, &str)] = &[
 
 fn manifest() -> Value {
     let prompts = templates::list();
-    let mut commands: Vec<Value> = COMMANDS
+    let mut commands: Vec<String> = COMMANDS
         .iter()
-        .map(|(name, description)| json!({"name": name, "description": description}))
+        .map(|(name, _)| (*name).to_string())
         .collect();
+    let mut descriptions = serde_json::Map::new();
+    for (name, description) in COMMANDS {
+        descriptions.insert((*name).to_string(), json!(description));
+    }
     let mut completion: Vec<String> = [
         "setup",
         "undo",
@@ -83,11 +87,9 @@ fn manifest() -> Value {
     .map(|s| (*s).to_string())
     .collect();
     for template in &prompts {
-        commands.push(json!({
-            "name": format!("/{}", template.name),
-            "description": template.description.clone(),
-            "argument_hint": template.argument_hint.clone(),
-        }));
+        let name = format!("/{}", template.name);
+        descriptions.insert(name.clone(), json!(template.description));
+        commands.push(name);
         completion.push(template.name.clone());
     }
     json!({
@@ -97,6 +99,7 @@ fn manifest() -> Value {
         "description": "Detect other agent tools, import their setup, update everything",
         "tools": [],
         "commands": commands,
+        "command_descriptions": descriptions,
         "turn_local": {"/cost": ["*"], "/copy": ["*"], "/export": ["*"], "/hotkeys": ["*"], "/intro": ["*"], "/qol": ["scanned"]},
         "hooks": ["session_start", "turn_end", "user_return"],
         "first_run": true,
