@@ -108,11 +108,8 @@ fn hint(host: &Host, params: &Value) {
     }
     let noun = if n == 1 { "session" } else { "sessions" };
     host.notice(
-        &format!(
-            "\u{26a0} {n} interrupted {noun} in {} \u{b7} /sessions to pick up",
-            paths::tilde(&cwd)
-        ),
-        "/qol sessions dismiss to clear",
+        &format!("\u{26a0} {n} interrupted {noun} in {}", paths::tilde(&cwd)),
+        "",
         "home",
         "qol.interrupted",
     );
