@@ -40,7 +40,13 @@ pub fn session_start(host: &Host, params: &Value) {
 }
 
 pub fn list() -> Vec<Template> {
-    TEMPLATES.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    let cached = TEMPLATES.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    if !cached.is_empty() {
+        return cached;
+    }
+    let found = discover();
+    *TEMPLATES.lock().unwrap_or_else(|e| e.into_inner()) = found.clone();
+    found
 }
 
 pub fn run(templates: &[Template], name: &str, rest: &str) -> Option<Value> {

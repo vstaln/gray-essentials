@@ -23,7 +23,16 @@ pub fn interactive(params: &Value) -> bool {
 }
 
 pub fn messages(host: &Host, last: usize) -> Vec<Value> {
-    host.transcript(last).unwrap_or_default()
+    for attempt in 0..3 {
+        match host.transcript(last) {
+            Ok(messages) => return messages,
+            Err(_) if attempt < 2 => {
+                std::thread::sleep(std::time::Duration::from_millis(400));
+            }
+            Err(_) => break,
+        }
+    }
+    Vec::new()
 }
 
 pub fn text(message: &Value) -> String {

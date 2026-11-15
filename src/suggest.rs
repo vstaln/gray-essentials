@@ -9,6 +9,7 @@ Reply with only that message, at most 12 words, no quotes.";
 const EXCERPT_CHARS: usize = 800;
 const MAX_TOKENS: u32 = 320;
 const MAX_WORDS: usize = 12;
+const GHOST_DELAY_MS: u64 = 400;
 
 pub fn turn_end(host: &Host, params: &Value) {
     if !prompt::interactive(params) || !settings::on("prompt_suggestions") {
@@ -28,6 +29,7 @@ pub fn turn_end(host: &Host, params: &Value) {
         return;
     };
     if let Some(text) = clean_reply(&raw) {
+        std::thread::sleep(std::time::Duration::from_millis(GHOST_DELAY_MS));
         host.ghost(&text);
     }
 }

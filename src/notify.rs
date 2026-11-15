@@ -8,6 +8,7 @@ use crate::prompt;
 use crate::settings;
 
 const STREAK_IDLE_RESET: Duration = Duration::from_secs(15 * 60);
+const NOTIFY_MIN_TURN: Duration = Duration::from_secs(10);
 const MESSAGE_MAX_CHARS: usize = 100;
 
 struct Streak {
@@ -27,18 +28,23 @@ pub fn turn_end(host: &Host, params: &Value) {
         return;
     }
     let failed = params.get("error").is_some_and(|e| !e.is_null());
-    break_reminder(host);
-    if !settings::on("notify_on_finish") {
+    let took = Duration::from_millis(params.get("took_ms").and_then(Value::as_u64).unwrap_or(0));
+    break_reminder(host, took);
+    if !settings::on("notify_on_finish") || focused(params) || took < NOTIFY_MIN_TURN {
         return;
     }
-    let body = match failed {
-        true => "turn failed".to_string(),
-        false => turn_message(host),
-    };
+    let body = turn_message(host, failed);
     host.notify("gray", &body);
 }
 
-fn break_reminder(host: &Host) {
+fn focused(params: &Value) -> bool {
+    params
+        .get("focused")
+        .and_then(Value::as_bool)
+        .unwrap_or(true)
+}
+
+fn break_reminder(host: &Host, took: Duration) {
     let Some(minutes) = settings::break_minutes() else {
         return;
     };
@@ -49,7 +55,7 @@ fn break_reminder(host: &Host) {
             .last_end
             .is_some_and(|end| now.saturating_duration_since(end) > STREAK_IDLE_RESET);
         if st.start.is_none() || broken {
-            st.start = Some(now);
+            st.start = Some(now.checked_sub(took).unwrap_or(now));
             st.reminded = false;
         }
         st.last_end = Some(now);
@@ -71,7 +77,7 @@ fn break_reminder(host: &Host) {
     }
 }
 
-fn turn_message(host: &Host) -> String {
+fn turn_message(host: &Host, failed: bool) -> String {
     let messages = prompt::messages(host, 1);
     let line = prompt::last_text(&messages, "assistant")
         .and_then(|text| {
@@ -87,5 +93,8 @@ fn turn_message(host: &Host) -> String {
                 .collect::<String>()
         })
         .filter(|l| !l.is_empty());
-    line.unwrap_or_else(|| "turn finished".to_string())
+    line.unwrap_or_else(|| match failed {
+        true => "turn failed".to_string(),
+        false => "turn finished".to_string(),
+    })
 }

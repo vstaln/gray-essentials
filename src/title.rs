@@ -38,7 +38,6 @@ pub fn turn_end(host: &Host, params: &Value) {
     if opener_tag(&first_user).is_some() {
         return;
     }
-    mark(&session);
     let body = format!(
         "First message:\n{}\n\nFirst reply:\n{}\n\nTitle for this session:",
         prompt::head(&first_user, EXCERPT_CHARS),
@@ -47,8 +46,10 @@ pub fn turn_end(host: &Host, params: &Value) {
     let Some(raw) = host.complete(SYSTEM, &body, MAX_TOKENS) else {
         return;
     };
-    if let Some(title) = title_from_reply(&raw) {
-        host.session_title(&title);
+    if let Some(title) = title_from_reply(&raw)
+        && host.session_title(&title)
+    {
+        mark(&session);
     }
 }
 
