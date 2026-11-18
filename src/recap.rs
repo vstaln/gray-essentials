@@ -11,7 +11,7 @@ In one or two short sentences, remind them what they were doing and what comes n
 Plain text only, no preamble.";
 const EXCERPT_CHARS: usize = 1500;
 const MAX_TOKENS: u32 = 160;
-const RECAP_AFTER_SECS: u64 = 180;
+const RECAP_AFTER_SECS: u64 = 60;
 
 static LAST: Mutex<Option<(String, usize, String)>> = Mutex::new(None);
 

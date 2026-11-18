@@ -22,7 +22,7 @@ const BREAK: &[&str] = &["never", "30 min", "60 min", "90 min", "120 min"];
 const ROWS: &[Row] = &[
     Row {
         key: "away_recap",
-        label: "Recap when you come back after 5+ min",
+        label: "Recap when you come back after 1+ min",
         short: "Recap on return",
         kind: Kind::Bool(true),
     },
