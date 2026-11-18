@@ -43,13 +43,12 @@ pub fn turn_end(host: &Host, params: &Value) {
         prompt::head(&first_user, EXCERPT_CHARS),
         prompt::head(&reply, EXCERPT_CHARS)
     );
-    let Some(raw) = host.complete(SYSTEM, &body, MAX_TOKENS) else {
-        return;
-    };
-    if let Some(title) = title_from_reply(&raw)
-        && host.session_title(&title)
+    mark(&session);
+    if let Some(title) = host
+        .complete(SYSTEM, &body, MAX_TOKENS)
+        .and_then(|raw| title_from_reply(&raw))
     {
-        mark(&session);
+        host.session_title(&title);
     }
 }
 
