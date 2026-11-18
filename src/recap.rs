@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::path::PathBuf;
 
 use serde_json::Value;
 
@@ -11,9 +11,30 @@ In one or two short sentences, remind them what they were doing and what comes n
 Plain text only, no preamble.";
 const EXCERPT_CHARS: usize = 1500;
 const MAX_TOKENS: u32 = 160;
-const RECAP_AFTER_SECS: u64 = 180;
+const RECAP_AFTER_SECS: u64 = 60;
 
-static LAST: Mutex<Option<(String, usize, String)>> = Mutex::new(None);
+fn last_path(session: &str) -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_CACHE_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))?;
+    let name: String = session
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let name = if name.is_empty() {
+        "none".to_string()
+    } else {
+        name
+    };
+    Some(base.join("gray-qol").join("recap").join(name))
+}
 
 fn recap_after() -> u64 {
     std::env::var("QOL_RECAP_SECS")
@@ -31,15 +52,16 @@ pub fn user_return(host: &Host, params: &Value) {
     let session = prompt::session_id(params);
     let messages = prompt::messages(host, prompt::TRANSCRIPT_LAST);
     let (count, tail_text) = prompt::signature(&messages);
-    {
-        let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
-        if last
-            .as_ref()
-            .is_some_and(|(s, c, t)| *s == session && *c == count && *t == tail_text)
-        {
+    let key = format!("{count}\n{tail_text}");
+    let path = last_path(&session);
+    if let Some(path) = &path {
+        if std::fs::read_to_string(path).is_ok_and(|prev| prev == key) {
             return;
         }
-        *last = Some((session, count, tail_text));
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let _ = std::fs::write(path, &key);
     }
     let Some(user) = prompt::last_text(&messages, "user") else {
         return;

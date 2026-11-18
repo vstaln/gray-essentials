@@ -36,14 +36,14 @@ pub const COMMAND: &str = "/qol";
 
 pub const WELCOME: &str = "Welcome to gray by alignment\ngray is a minimal agent that runs tools, edits code, and works with any model provider.";
 
-const USAGE: &str = "/qol               interrupted sessions, detected tools, updates\n\
+const USAGE: &str = "/qol               sessions, features, detected tools, updates\n\
 /qol setup [tool]   import rules, skills, MCP servers and a subscription plugin\n\
 /qol undo [n]       revert the last n imports (default 1)\n\
 /qol dismiss <tool> never mention a detected tool again\n\
 /qol scanned        what the detector looked at and found\n\
 /qol update         update provider CLIs, plugins and gray in one go\n\
 /qol first-run      the first-run welcome\n\
-/qol sessions dismiss  clear the interrupted-session hint (i in /qol hides it for good)\n\
+/qol sessions dismiss  clear the interrupted-session hint (Interrupted notice in /qol hides it for good)\n\
 \n\
 /cd [path]          change gray's working directory and resume here (alias: /chdir)";
 
@@ -189,7 +189,7 @@ fn command_run(host: &Host, params: &Value) -> Value {
     }
     match words.as_slice() {
         [] => panel::open(host, params),
-        ["--pick", pick] => panel::pick(host, params, &session, pick),
+        ["--pick", .., pick] => panel::pick(host, params, &session, pick),
         ["help"] => json!({"text": USAGE}),
         ["setup", rest @ ..] => setup::command(host, rest.first().copied()),
         ["cd", ..] | ["chdir", ..] => cd::command(host, &argv[1..]),

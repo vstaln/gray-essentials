@@ -156,7 +156,7 @@ fn hint(host: &Host, params: &Value) {
 
 pub fn dismiss_command(host: &Host, params: &Value) -> Value {
     if !shown() {
-        return json!({"text": "interrupted sessions are hidden (i in /qol shows them)"});
+        return json!({"text": "interrupted sessions are hidden (Interrupted notice in /qol shows them)"});
     }
     let Some(cwd) = prompt::cwd(params) else {
         return json!({"text": "no session directory"});
