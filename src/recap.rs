@@ -51,8 +51,11 @@ pub fn user_return(host: &Host, params: &Value) {
     }
     let session = prompt::session_id(params);
     let messages = prompt::messages(host, prompt::TRANSCRIPT_LAST);
-    let (count, tail_text) = prompt::signature(&messages);
-    let key = format!("{count}\n{tail_text}");
+    let Some(user) = prompt::last_text(&messages, "user") else {
+        return;
+    };
+    let reply = prompt::last_text(&messages, "assistant").unwrap_or_default();
+    let key = serde_json::json!([user, reply]).to_string();
     let path = last_path(&session);
     if let Some(path) = &path {
         if std::fs::read_to_string(path).is_ok_and(|prev| prev == key) {
@@ -63,10 +66,6 @@ pub fn user_return(host: &Host, params: &Value) {
         }
         let _ = std::fs::write(path, &key);
     }
-    let Some(user) = prompt::last_text(&messages, "user") else {
-        return;
-    };
-    let reply = prompt::last_text(&messages, "assistant").unwrap_or_default();
     let body = format!(
         "Last request:\n{}\n\nLast reply:\n{}\n\nRecap:",
         prompt::tail(&user, EXCERPT_CHARS),
