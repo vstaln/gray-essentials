@@ -68,17 +68,3 @@ pub fn tail(s: &str, n: usize) -> String {
 pub fn head(s: &str, n: usize) -> String {
     s.trim().chars().take(n).collect()
 }
-
-pub fn signature(messages: &[Value]) -> (usize, String) {
-    let last = messages
-        .last()
-        .map(|m| {
-            format!(
-                "{}:{}",
-                m.get("role").and_then(Value::as_str).unwrap_or(""),
-                text(m)
-            )
-        })
-        .unwrap_or_default();
-    (messages.len(), last)
-}
