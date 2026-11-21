@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
@@ -14,9 +14,11 @@ const COMMAND_TIMEOUT: Duration = Duration::from_secs(3);
 const KEY: &str = "command";
 
 static FACTS: Mutex<Option<Value>> = Mutex::new(None);
+static HOST: OnceLock<Arc<Host>> = OnceLock::new();
 
-pub fn on_event(params: &Value) {
+pub fn on_event(host: &Arc<Host>, params: &Value) {
     remember(params);
+    HOST.get_or_init(|| Arc::clone(host));
     start();
 }
 
@@ -62,11 +64,14 @@ fn merge(base: &mut Value, next: &Value) {
 fn start() {
     static STARTED: std::sync::Once = std::sync::Once::new();
     STARTED.call_once(|| {
-        let host = std::sync::Arc::new(Host::new());
         let _ = std::thread::Builder::new()
             .name("qol-statusline".into())
             .spawn(move || {
                 loop {
+                    let Some(host) = HOST.get() else {
+                        std::thread::sleep(Duration::from_millis(MIN_INTERVAL_MS));
+                        continue;
+                    };
                     let interval = interval_ms();
                     let shown = config_command().and_then(|cmd| {
                         run(&cmd, &facts()).and_then(|out| {
