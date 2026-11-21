@@ -14,7 +14,7 @@ const CONTINUE_GRACE: u64 = 30;
 static TURN_GEN: AtomicU64 = AtomicU64::new(0);
 
 pub fn turn_end(host: &Arc<Host>, params: &Value) {
-    let armed = TURN_GEN.fetch_add(1, Ordering::Relaxed);
+    let armed = TURN_GEN.fetch_add(1, Ordering::Relaxed) + 1;
     let error = params.get("error").cloned().unwrap_or(Value::Null);
     if error.get("kind").and_then(Value::as_str) != Some("usage_limit") {
         return;
@@ -25,18 +25,22 @@ pub fn turn_end(host: &Arc<Host>, params: &Value) {
     let Some(resets_at) = error.get("resets_at").and_then(Value::as_u64) else {
         return;
     };
-    let wait = resets_at.saturating_sub(crate::paths::now()) + CONTINUE_GRACE;
+    let due = resets_at.max(crate::paths::now()) + CONTINUE_GRACE;
+    let wait = due.saturating_sub(crate::paths::now());
     host.say(&format!(
         "\u{b7} resuming in {} \u{b7} usage limit reset",
         span(wait)
     ));
     let host = Arc::clone(host);
     std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_secs(wait));
-        if TURN_GEN.load(Ordering::Relaxed) != armed {
-            return;
+        while TURN_GEN.load(Ordering::Relaxed) == armed {
+            let left = due.saturating_sub(crate::paths::now());
+            if left == 0 {
+                host.inject(CONTINUE_AFTER_LIMIT);
+                return;
+            }
+            std::thread::sleep(Duration::from_secs(left.min(30)));
         }
-        host.inject(CONTINUE_AFTER_LIMIT);
     });
 }
 
