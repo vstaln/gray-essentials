@@ -17,6 +17,7 @@ mod settings;
 mod setup;
 mod sources;
 mod state;
+mod status_command;
 mod suggest;
 mod templates;
 mod title;
@@ -213,6 +214,7 @@ fn command_run(host: &Host, params: &Value) -> Value {
 fn on_event(host: &Arc<Host>, params: &Value) {
     match params.get("type").and_then(Value::as_str) {
         Some("session_start") => {
+            status_command::on_event(params);
             templates::session_start(host, params);
             links::session_start(host, params);
             if prompt::interactive(params) {
@@ -227,6 +229,7 @@ fn on_event(host: &Arc<Host>, params: &Value) {
             recap::user_return(host, params);
         }
         Some("turn_end") => {
+            status_command::on_event(params);
             usage::record_turn(&prompt::session_id(params), &params["usage"]);
             sessions::refresh(host, params);
             auto_continue::turn_end(host, params);
