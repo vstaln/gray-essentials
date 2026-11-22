@@ -188,30 +188,10 @@ fn run(cmd: &str, facts: &Value) -> Option<String> {
 }
 
 fn first_line(s: &str) -> String {
-    strip_ansi(s)
+    crate::update::strip_ansi(s)
         .lines()
         .map(str::trim)
         .find(|l| !l.is_empty())
         .unwrap_or("")
         .to_string()
-}
-
-fn strip_ansi(s: &str) -> String {
-    let mut out = String::new();
-    let mut it = s.chars().peekable();
-    while let Some(c) = it.next() {
-        if c == '\x1b' {
-            if it.peek() == Some(&'[') {
-                it.next();
-                for d in it.by_ref() {
-                    if d.is_ascii_alphabetic() {
-                        break;
-                    }
-                }
-            }
-            continue;
-        }
-        out.push(c);
-    }
-    out
 }

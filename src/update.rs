@@ -107,7 +107,7 @@ fn sv(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|s| s.to_string()).collect()
 }
 
-fn strip_ansi(s: &str) -> String {
+pub(crate) fn strip_ansi(s: &str) -> String {
     let mut out = String::new();
     let mut it = s.chars().peekable();
     while let Some(c) = it.next() {
