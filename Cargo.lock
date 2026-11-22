@@ -181,8 +181,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "gray-quality-of-life"
-version = "0.2.4"
+name = "gray-extras"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "crossterm",

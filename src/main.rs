@@ -10,7 +10,9 @@ mod links;
 mod notify;
 mod panel;
 mod paths;
+mod permissions;
 mod prompt;
+mod questions;
 mod recap;
 mod sessions;
 mod settings;
@@ -20,37 +22,46 @@ mod state;
 mod status_command;
 mod suggest;
 mod templates;
+mod themes;
 mod title;
 mod update;
 mod usage;
 mod usage_warn;
+mod vim;
 
 use std::io::{BufRead, IsTerminal};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 
 use host::Host;
+use vim::{Press, State as VimState};
 
-pub const PLUGIN_NAME: &str = "quality-of-life";
+pub const PLUGIN_NAME: &str = "extras";
 pub const PROTOCOL: &str = "1.1";
-pub const COMMAND: &str = "/qol";
+pub const COMMAND: &str = "/extras";
 
 pub const WELCOME: &str = "Welcome to gray by alignment\ngray is a minimal agent that runs tools, edits code, and works with any model provider.";
 
-const USAGE: &str = "/qol               sessions, features, detected tools, updates\n\
-/qol setup [tool]   import rules, skills, MCP servers and a subscription plugin\n\
-/qol undo [n]       revert the last n imports (default 1)\n\
-/qol dismiss <tool> never mention a detected tool again\n\
-/qol scanned        what the detector looked at and found\n\
-/qol update         update provider CLIs, plugins and gray in one go\n\
-/qol first-run      the first-run welcome\n\
-/qol sessions dismiss  clear the interrupted-session hint (Interrupted notice in /qol hides it for good)\n\
+const USAGE: &str = "/extras               sessions, features, detected tools, updates (alias: /qol)\n\
+/extras setup [tool]  import rules, skills, MCP servers and a subscription plugin\n\
+/extras undo [n]      revert the last n imports (default 1)\n\
+/extras dismiss <t>   never mention a detected tool again\n\
+/extras scanned       what the detector looked at and found\n\
+/extras update        update provider CLIs, plugins and gray in one go\n\
+/extras first-run     the first-run welcome\n\
+/extras sessions dismiss  clear the interrupted-session hint\n\
 \n\
-/cd [path]          change gray's working directory and resume here (alias: /chdir)";
+/theme [name]         pick or set a color theme (alias: /palettes)\n\
+/permissions [mode]   view or change tool approval mode (aliases: /perms, /access)\n\
+/cd [path]            change gray's working directory and resume here (alias: /chdir)";
 
 const COMMANDS: &[(&str, &str)] = &[
-    ("/qol", "detect other agent tools and import their setup"),
+    (
+        "/extras",
+        "sessions, features, vim mode, detected tools, and updates",
+    ),
+    ("/qol", "alias for /extras"),
     (
         "/setup",
         "import rules, skills and MCP servers from other tools",
@@ -65,6 +76,11 @@ const COMMANDS: &[(&str, &str)] = &[
     ("/intro", "toggle the logo intro"),
     ("/cd", "change the working directory and resume here"),
     ("/chdir", "change the working directory and resume here"),
+    ("/theme", "pick or apply a color theme"),
+    ("/palettes", "list or install color palettes"),
+    ("/permissions", "view or set tool approval mode"),
+    ("/perms", "alias for /permissions"),
+    ("/access", "alias for /permissions"),
 ];
 
 fn manifest() -> Value {
@@ -100,12 +116,30 @@ fn manifest() -> Value {
         "name": PLUGIN_NAME,
         "version": env!("CARGO_PKG_VERSION"),
         "protocol": PROTOCOL,
-        "description": "Detect other agent tools, import their setup, update everything",
-        "tools": [],
+        "description": "Gray extras: UX bundle, vim mode, themes, permissions, questions, setup, and updates",
+        "tools": [questions::tool_def()],
         "commands": commands,
         "command_descriptions": descriptions,
-        "turn_local": {"/cost": ["*"], "/copy": ["*"], "/export": ["*"], "/hotkeys": ["*"], "/intro": ["*"], "/qol": ["scanned"]},
-        "hooks": ["session_start", "turn_end", "user_return"],
+        "turn_local": {
+            "/cost": ["*"],
+            "/copy": ["*"],
+            "/export": ["*"],
+            "/hotkeys": ["*"],
+            "/intro": ["*"],
+            "/extras": ["scanned"],
+            "/qol": ["scanned"],
+            "/permissions": ["*"],
+            "/perms": ["*"],
+            "/access": ["*"],
+        },
+        "hooks": [
+            "session_start",
+            "turn_end",
+            "user_return",
+            "input/key",
+            "tool/before",
+            "prompt/context",
+        ],
         "first_run": true,
         "capabilities": [
             "host.say",
@@ -121,6 +155,7 @@ fn manifest() -> Value {
         ],
         "settings": settings::manifest_rows(),
         "completion": completion,
+        "command_completions": {"/export": ["clip", "md", "txt", "help"]},
     })
 }
 
@@ -144,15 +179,48 @@ fn argv_of(params: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn command_run(host: &Host, params: &Value) -> Value {
+fn input_key(vim_state: &Mutex<VimState>, params: &Value) -> Value {
+    if !settings::on("vim_mode") {
+        return json!({"handled": false});
+    }
+    let key = params.get("key").cloned().unwrap_or(Value::Null);
+    let code = key.get("code").and_then(Value::as_str).unwrap_or("");
+    let press = Press {
+        code: code.to_string(),
+        ctrl: key.get("ctrl").and_then(Value::as_bool).unwrap_or(false),
+        alt: key.get("alt").and_then(Value::as_bool).unwrap_or(false),
+    };
+    let text = params.get("text").and_then(Value::as_str).unwrap_or("");
+    let cursor = params.get("cursor").and_then(Value::as_u64).unwrap_or(0) as usize;
+    let completing = params
+        .get("completing")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let mut state = vim_state.lock().unwrap_or_else(|e| e.into_inner());
+    let reply = state.handle(&press, text, cursor, completing);
+    if !reply.handled {
+        state.clear_pending();
+    }
+    reply.to_json()
+}
+
+fn command_run(
+    host: &Host,
+    gate: &permissions::ApprovalGate,
+    params: &Value,
+) -> Value {
     let name = params
         .get("name")
         .and_then(Value::as_str)
         .unwrap_or(COMMAND);
     let argv = argv_of(params);
+    if name == "/theme" || name == "/palettes" {
+        return themes::command(host, name, &argv);
+    }
+    if permissions::COMMANDS.contains(&name) {
+        return permissions::command(gate, &argv);
+    }
     if name == "/setup" {
-        // Same verb surface as the old core /setup: [tool] imports,
-        // undo/dismiss/scanned manage the log.
         let words: Vec<&str> = argv.iter().map(String::as_str).collect();
         return match words.as_slice() {
             ["undo"] => setup::undo(1),
@@ -198,20 +266,21 @@ fn command_run(host: &Host, params: &Value) -> Value {
         ["undo"] => setup::undo(1),
         ["undo", n] => match n.parse::<usize>() {
             Ok(n) if n > 0 => setup::undo(n),
-            _ => json!({"text": "usage: /qol undo [n]"}),
+            _ => json!({"text": "usage: /extras undo [n]"}),
         },
         ["dismiss", tool] => setup::dismiss(tool),
-        ["dismiss"] => json!({"text": "usage: /qol dismiss <tool>"}),
+        ["dismiss"] => json!({"text": "usage: /extras dismiss <tool>"}),
         ["scanned"] => detect::scanned_report(),
         ["update", ..] => update::run(host, &session),
         ["first-run"] => setup::first_run(host),
         ["sessions", "dismiss"] => sessions::dismiss_command(host, params),
-        ["sessions"] => json!({"text": "usage: /qol sessions dismiss"}),
-        _ => json!({"text": format!("unknown: /qol {}\n{USAGE}", argv.join(" "))}),
+        ["sessions"] => json!({"text": "usage: /extras sessions dismiss"}),
+        _ => json!({"text": format!("unknown: {name} {}\n{USAGE}", argv.join(" "))}),
     }
 }
 
 fn on_event(host: &Arc<Host>, params: &Value) {
+    permissions::note_host_event(params);
     match params.get("type").and_then(Value::as_str) {
         Some("session_start") => {
             status_command::on_event(host, params);
@@ -244,10 +313,29 @@ fn on_event(host: &Arc<Host>, params: &Value) {
     }
 }
 
-fn handle(host: &Host, id: Value, method: &str, params: &Value) -> Value {
+fn handle(
+    host: &Host,
+    vim_state: &Mutex<VimState>,
+    gate: &permissions::ApprovalGate,
+    id: Value,
+    method: &str,
+    params: &Value,
+) -> Value {
     match method {
         "plugin/manifest" => json!({"id": id, "result": manifest()}),
-        "command/run" => json!({"id": id, "result": command_run(host, params)}),
+        "command/run" => json!({"id": id, "result": command_run(host, gate, params)}),
+        "input/key" => json!({"id": id, "result": input_key(vim_state, params)}),
+        "tool/before" => json!({"id": id, "result": permissions::tool_before(host, gate, params)}),
+        "prompt/context" => json!({"id": id, "result": {"text": questions::prompt_guidance()}}),
+        "tool/call" => {
+            let name = params.get("name").and_then(Value::as_str).unwrap_or("");
+            let result = if name == questions::TOOL_NAME || name.is_empty() {
+                questions::tool_call(host, params)
+            } else {
+                json!({"content": format!("unknown tool: {name}"), "is_error": true})
+            };
+            json!({"id": id, "result": result})
+        }
         other => json!({"id": id, "error": {
             "code": -32601,
             "message": format!("method not found: {other}")
@@ -257,6 +345,8 @@ fn handle(host: &Host, id: Value, method: &str, params: &Value) -> Value {
 
 fn sidecar() {
     let host = Arc::new(Host::new());
+    let vim_state = Arc::new(Mutex::new(VimState::default()));
+    let gate = Arc::new(permissions::new_gate());
     let mut workers: Vec<std::thread::JoinHandle<()>> = Vec::new();
     let stdin = std::io::stdin();
     for line in stdin.lock().lines() {
@@ -284,13 +374,13 @@ fn sidecar() {
         };
         let method = method.to_string();
         let host = host.clone();
+        let vim_state = vim_state.clone();
+        let gate = gate.clone();
         workers.push(std::thread::spawn(move || {
-            let reply = handle(&host, id, &method, &params);
+            let reply = handle(&host, &vim_state, &gate, id, &method, &params);
             host.write(&reply);
         }));
     }
-    // stdin closed — let in-flight workers finish their replies before
-    // exit, or a fast harness (tests, conformance probes) loses them.
     for w in workers {
         let _ = w.join();
     }
@@ -303,7 +393,6 @@ fn main() {
         Some("sidecar") => sidecar(),
         Some("update") => update::cli(),
         Some("usage") | Some("cost") => {
-            let _ = args;
             println!(
                 "{}",
                 usage::usage_command(&args[1..])["text"]
@@ -338,7 +427,7 @@ fn main() {
         }
         Some(_) => println!("{USAGE}"),
         None if std::io::stdin().is_terminal() => {
-            eprintln!("qol is a gray plugin sidecar — install with `gray plugin install`");
+            eprintln!("gray-extras is a gray plugin sidecar — install with `gray plugin install`");
         }
         None => sidecar(),
     }

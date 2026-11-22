@@ -1,12 +1,12 @@
 [package]
-name = "gray-quality-of-life"
-version = "0.2.4"
+name = "gray-extras"
+version = "0.3.0"
 edition = "2024"
 license = "MIT"
-description = "Detect other agent tools, import their setup, and update everything for the gray agent harness"
+description = "Gray extras: UX bundle, vim mode, themes, permissions, questions, setup, and updates"
 
 [[bin]]
-name = "qol"
+name = "gray-extras"
 path = "src/main.rs"
 
 [dependencies]

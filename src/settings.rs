@@ -2,7 +2,8 @@ use serde_json::{Value, json};
 
 use crate::paths;
 
-pub const NAME: &str = "quality-of-life";
+pub const NAME: &str = "extras";
+const LEGACY_NAME: &str = "quality-of-life";
 
 enum Kind {
     Bool(bool),
@@ -74,6 +75,12 @@ const ROWS: &[Row] = &[
         short: "Break reminder",
         kind: Kind::Choice(BREAK, "never"),
     },
+    Row {
+        key: "vim_mode",
+        label: "Vim keybindings in the input box",
+        short: "Vim mode",
+        kind: Kind::Bool(false),
+    },
 ];
 
 pub fn manifest_rows() -> Value {
@@ -102,7 +109,9 @@ fn store_path() -> std::path::PathBuf {
 }
 
 fn stored_all() -> serde_json::Map<String, Value> {
-    std::fs::read_to_string(store_path())
+    let dir = paths::gray_home().join("plugin-settings");
+    std::fs::read_to_string(dir.join(format!("{NAME}.json")))
+        .or_else(|_| std::fs::read_to_string(dir.join(format!("{LEGACY_NAME}.json"))))
         .ok()
         .and_then(|t| serde_json::from_str::<Value>(&t).ok())
         .and_then(|v| v.as_object().cloned())
