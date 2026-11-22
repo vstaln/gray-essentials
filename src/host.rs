@@ -92,6 +92,10 @@ impl Host {
         let _ = self.call("host/say", json!({"text": text, "card": card}), HOST_TTL);
     }
 
+    pub fn status(&self, key: &str, text: &str) {
+        let _ = self.call("host/status", json!({"key": key, "text": text}), HOST_TTL);
+    }
+
     pub fn transcript(&self, last: usize) -> Result<Vec<Value>, String> {
         self.call("host/transcript", json!({"last": last}), HOST_TTL)
             .map(|v| {

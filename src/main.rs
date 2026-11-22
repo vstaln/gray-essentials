@@ -17,11 +17,13 @@ mod settings;
 mod setup;
 mod sources;
 mod state;
+mod status_command;
 mod suggest;
 mod templates;
 mod title;
 mod update;
 mod usage;
+mod usage_warn;
 
 use std::io::{BufRead, IsTerminal};
 use std::sync::Arc;
@@ -212,6 +214,7 @@ fn command_run(host: &Host, params: &Value) -> Value {
 fn on_event(host: &Arc<Host>, params: &Value) {
     match params.get("type").and_then(Value::as_str) {
         Some("session_start") => {
+            status_command::on_event(host, params);
             templates::session_start(host, params);
             links::session_start(host, params);
             if prompt::interactive(params) {
@@ -226,11 +229,12 @@ fn on_event(host: &Arc<Host>, params: &Value) {
             recap::user_return(host, params);
         }
         Some("turn_end") => {
+            status_command::on_event(host, params);
             usage::record_turn(&prompt::session_id(params), &params["usage"]);
             sessions::refresh(host, params);
             auto_continue::turn_end(host, params);
             notify::turn_end(host, params);
-            for worker in [title::turn_end, suggest::turn_end] {
+            for worker in [title::turn_end, suggest::turn_end, usage_warn::turn_end] {
                 let host = Arc::clone(host);
                 let params = params.clone();
                 let _ = std::thread::spawn(move || worker(&host, &params));
