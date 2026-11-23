@@ -165,7 +165,7 @@ fn manifest() -> Value {
         ],
         "settings": settings::manifest_rows(),
         "completion": completion,
-        "command_completions": {"/export": ["clip", "md", "txt", "help"], "/secrets": ["set", "rm", "list", "exec", "elevate-setup"]},
+        "command_completions": {"/export": ["clip", "md", "txt", "help"], "/secrets": ["set", "rm", "list", "exec", "elevate-setup"], "/permissions": ["auto", "full", "bypass", "read-only"], "/perms": ["auto", "full", "bypass", "read-only"], "/access": ["auto", "full", "bypass", "read-only"]},
     })
 }
 

@@ -1,16 +1,17 @@
 mod core;
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::Duration;
 
 use serde_json::{Value, json};
 
 use crate::host::Host;
+use crate::settings;
 pub use core::ApprovalGate;
 use core::{
-    APPROVAL_QUESTION_ID, LABEL_DENY, MODE_AUTO, MODE_FULL, Outcome, Scope, approval_question,
-    call_label, decide_from_answers, host_is_headless, run_permissions_command, save_rule,
+    APPROVAL_QUESTION_ID, LABEL_DENY, MODE_FULL, Outcome, Scope, approval_question, call_label,
+    decide_from_answers, host_is_headless, normalize_mode, run_permissions_command, save_rule,
 };
 
 pub const COMMANDS: &[&str] = core::COMMANDS;
@@ -23,13 +24,26 @@ const HOST_UNKNOWN: u8 = 0;
 const HOST_INTERACTIVE: u8 = 1;
 const HOST_HEADLESS: u8 = 2;
 static HOST: AtomicU8 = AtomicU8::new(HOST_UNKNOWN);
+static MODE_PINNED: AtomicBool = AtomicBool::new(false);
 
-pub fn new_gate() -> ApprovalGate {
-    let mode = ["GRAY_PERMISSION", "GRAY_PERMISSIONS"]
+fn env_mode() -> Option<String> {
+    ["GRAY_PERMISSION", "GRAY_PERMISSIONS"]
         .into_iter()
         .find_map(|key| std::env::var(key).ok().filter(|v| !v.trim().is_empty()))
-        .unwrap_or_else(|| MODE_AUTO.to_string());
-    ApprovalGate::new(&mode)
+}
+
+fn sync_persisted_mode(gate: &ApprovalGate) {
+    if !MODE_PINNED.load(Ordering::Relaxed) {
+        gate.set_mode(&settings::choice("permissions_mode"));
+    }
+}
+
+pub fn new_gate() -> ApprovalGate {
+    if let Some(mode) = env_mode() {
+        MODE_PINNED.store(true, Ordering::Relaxed);
+        return ApprovalGate::new(&mode);
+    }
+    ApprovalGate::new(&settings::choice("permissions_mode"))
 }
 
 pub fn note_host_event(params: &Value) {
@@ -78,6 +92,19 @@ fn ask_ttl(host: &Host) -> Option<Duration> {
 }
 
 pub fn command(gate: &ApprovalGate, argv: &[String]) -> Value {
+    if argv.is_empty() {
+        sync_persisted_mode(gate);
+        return json!({ "text": run_permissions_command(gate, argv) });
+    }
+    if let Some(clean) = argv.first().and_then(|m| normalize_mode(m)) {
+        MODE_PINNED.store(false, Ordering::Relaxed);
+        gate.set_mode(clean);
+        if let Err(e) = settings::set_choice("permissions_mode", clean) {
+            eprintln!("permissions: could not persist mode ({e})");
+            return json!({ "text": format!("permissions: {clean} (this session only: {e})") });
+        }
+        return json!({ "text": format!("permissions: {clean} (saved)") });
+    }
     json!({ "text": run_permissions_command(gate, argv) })
 }
 
@@ -93,6 +120,7 @@ pub fn tool_before(host: &Host, gate: &ApprovalGate, params: &Value) -> Value {
     if name.is_empty() {
         return json!({"decision": "deny", "reason": "empty tool name"});
     }
+    sync_persisted_mode(gate);
     match gate.check_cached(name, &args, &cwd) {
         Ok(true) => return json!({"decision": "allow"}),
         Err(reason) => return json!({"decision": "deny", "reason": reason}),
@@ -124,6 +152,7 @@ pub fn tool_before(host: &Host, gate: &ApprovalGate, params: &Value) -> Value {
             })
             .unwrap_or_default(),
         Err(err) => {
+            eprintln!("permissions: host/ask failed: {err}");
             if err.contains("ask service not installed") {
                 return json!({"decision": "allow"});
             }
@@ -154,7 +183,17 @@ pub fn tool_before(host: &Host, gate: &ApprovalGate, params: &Value) -> Value {
             json!({"decision": "allow"})
         }
         Outcome::Bypass => {
+            MODE_PINNED.store(true, Ordering::Relaxed);
             gate.set_mode(MODE_FULL);
+            json!({"decision": "allow"})
+        }
+        Outcome::BypassAlways => {
+            MODE_PINNED.store(false, Ordering::Relaxed);
+            gate.set_mode(MODE_FULL);
+            if let Err(e) = settings::set_choice("permissions_mode", MODE_FULL) {
+                eprintln!("permissions: could not persist bypass mode ({e})");
+                MODE_PINNED.store(true, Ordering::Relaxed);
+            }
             json!({"decision": "allow"})
         }
         Outcome::Edit(text) => {

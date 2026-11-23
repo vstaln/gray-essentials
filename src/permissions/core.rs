@@ -61,6 +61,7 @@ pub enum Outcome {
     AllowAlways,
     /// Switch the mode to `full` and allow.
     Bypass,
+    BypassAlways,
     /// `e`-edited subject: run the tool with modified args.
     Edit(String),
     /// A typed note: deny the call with the note as the reason; the turn
@@ -110,6 +111,7 @@ pub const LABEL_DENY: &str = "Deny";
 
 /// Scope slider values on the Allow row, in cycle order (Devin parity).
 pub const SCOPES: &[&str] = &["Once", "Session", "Project", "Always"];
+pub const BYPASS_SCOPES: &[&str] = &["Session", "Always"];
 
 pub const APPROVAL_QUESTION_ID: &str = "tool-approval";
 
@@ -245,7 +247,8 @@ pub fn normalize_mode(s: &str) -> Option<&'static str> {
     match s.trim().to_ascii_lowercase().replace(' ', "-").as_str() {
         "read-only" | "readonly" | "read_only" | "ro" => Some(MODE_READ_ONLY),
         "auto" | "ask" | "default" | "ask-for-approval" | "workspace" => Some(MODE_AUTO),
-        "full" | "full-access" | "full_access" | "never" | "yolo" => Some(MODE_FULL),
+        "full" | "full-access" | "full_access" | "bypass" | "bypass-mode" | "bypass_mode"
+        | "never" | "yolo" => Some(MODE_FULL),
         _ => None,
     }
 }
@@ -389,9 +392,9 @@ pub fn approval_question(tool: &str, label: &str, cwd: &Path) -> AskQuestion {
             AskOption {
                 label: LABEL_BYPASS.to_string(),
                 description:
-                    "Run this and stop asking: every tool is allowed for the rest of the session."
+                    "Run this and stop asking: every tool is allowed for the session or always."
                         .to_string(),
-                scopes: Vec::new(),
+                scopes: BYPASS_SCOPES.iter().map(|s| s.to_string()).collect(),
             },
             AskOption {
                 label: LABEL_DENY.to_string(),
@@ -424,7 +427,15 @@ pub fn decide_from_answers(answers: &[String]) -> Outcome {
     }
     let has = |l: &str| answers.iter().any(|a| a == l);
     if has(LABEL_BYPASS) {
-        return Outcome::Bypass;
+        let scope = answers
+            .iter()
+            .find_map(|a| a.strip_prefix("scope: "))
+            .unwrap_or("Session");
+        return if scope.eq_ignore_ascii_case("always") {
+            Outcome::BypassAlways
+        } else {
+            Outcome::Bypass
+        };
     }
     if has(LABEL_ALLOW) {
         let scope = answers

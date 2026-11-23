@@ -15,8 +15,7 @@ pub struct Host {
     out: Mutex<std::io::Stdout>,
     pending: Mutex<HashMap<String, mpsc::Sender<Value>>>,
     counter: AtomicU64,
-    answered: std::sync::atomic::AtomicBool,
-    unresponsive: std::sync::atomic::AtomicBool,
+    closed: std::sync::atomic::AtomicBool,
 }
 
 impl Host {
@@ -25,13 +24,12 @@ impl Host {
             out: Mutex::new(std::io::stdout()),
             pending: Mutex::new(HashMap::new()),
             counter: AtomicU64::new(0),
-            answered: std::sync::atomic::AtomicBool::new(false),
-            unresponsive: std::sync::atomic::AtomicBool::new(false),
+            closed: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
     pub fn close(&self) {
-        self.unresponsive.store(true, Ordering::Relaxed);
+        self.closed.store(true, Ordering::Relaxed);
         self.pending
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -45,7 +43,6 @@ impl Host {
     }
 
     pub fn deliver(&self, id: &str, msg: Value) {
-        self.answered.store(true, Ordering::Relaxed);
         let tx = self
             .pending
             .lock()
@@ -57,18 +54,9 @@ impl Host {
     }
 
     pub fn call(&self, method: &str, params: Value, ttl: Duration) -> Result<Value, String> {
-        if self.unresponsive.load(Ordering::Relaxed) {
+        if self.closed.load(Ordering::Relaxed) {
             return Err(format!("{method}: host did not answer"));
         }
-        let fast = !matches!(
-            method,
-            "host/ask" | "host/secret" | "host/plugin_install" | "host/complete"
-        ) || params.get("blocking").and_then(Value::as_bool) == Some(false);
-        let effective_ttl = if fast && !self.answered.load(Ordering::Relaxed) {
-            ttl.min(Duration::from_secs(2))
-        } else {
-            ttl
-        };
         let n = self.counter.fetch_add(1, Ordering::Relaxed) + 1;
         let id = format!("qol{n}");
         let (tx, rx) = mpsc::channel();
@@ -77,14 +65,11 @@ impl Host {
             .unwrap_or_else(|e| e.into_inner())
             .insert(id.clone(), tx);
         self.write(&json!({"id": id, "method": method, "params": params}));
-        let msg = rx.recv_timeout(effective_ttl).map_err(|_| {
+        let msg = rx.recv_timeout(ttl).map_err(|_| {
             self.pending
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .remove(&id);
-            if fast && !self.answered.load(Ordering::Relaxed) {
-                self.unresponsive.store(true, Ordering::Relaxed);
-            }
             format!("{method}: host did not answer")
         })?;
         if let Some(err) = msg.get("error").filter(|e| !e.is_null()) {

@@ -19,6 +19,7 @@ struct Row {
 
 const CLEANUP: &[&str] = &["never", "7 days", "30 days", "90 days", "365 days"];
 const BREAK: &[&str] = &["never", "30 min", "60 min", "90 min", "120 min"];
+const PERMISSION_MODES: &[&str] = &["auto", "full", "read-only"];
 
 const ROWS: &[Row] = &[
     Row {
@@ -81,6 +82,12 @@ const ROWS: &[Row] = &[
         short: "Vim mode",
         kind: Kind::Bool(false),
     },
+    Row {
+        key: "permissions_mode",
+        label: "Tool approval mode (full = always bypass)",
+        short: "Permissions mode",
+        kind: Kind::Choice(PERMISSION_MODES, "auto"),
+    },
 ];
 
 pub fn manifest_rows() -> Value {
@@ -137,7 +144,7 @@ pub fn panel_rows() -> Vec<PanelRow> {
                 Kind::Bool(_) if on(r.key) => "\u{2713} on".to_string(),
                 Kind::Bool(_) => "off".to_string(),
                 Kind::Choice(..) => match choice(r.key) {
-                    c if leading_number(&c).is_none() => "off".to_string(),
+                    c if c == "never" => "off".to_string(),
                     c => c,
                 },
             },
@@ -157,8 +164,29 @@ pub fn step(key: &str) -> std::io::Result<()> {
             Value::String(choices[i % choices.len()].to_string())
         }
     };
+    write_value(key, next)
+}
+
+pub fn set_choice(key: &str, value: &str) -> std::io::Result<()> {
+    let Some(row) = declare(key) else {
+        return Err(std::io::Error::other(format!("unknown setting {key:?}")));
+    };
+    let Kind::Choice(choices, _) = &row.kind else {
+        return Err(std::io::Error::other(format!(
+            "setting {key:?} is not a choice"
+        )));
+    };
+    if !choices.contains(&value) {
+        return Err(std::io::Error::other(format!(
+            "invalid value {value:?} for {key:?}"
+        )));
+    }
+    write_value(key, Value::String(value.to_string()))
+}
+
+fn write_value(key: &str, value: Value) -> std::io::Result<()> {
     let mut values = stored_all();
-    values.insert(key.to_string(), next);
+    values.insert(key.to_string(), value);
     let text =
         serde_json::to_string_pretty(&Value::Object(values)).map_err(std::io::Error::other)?;
     let path = store_path();
