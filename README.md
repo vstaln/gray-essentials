@@ -1,8 +1,8 @@
 <p align="center">
   <img src="assets/gray-logo.svg" alt="gray" width="96">
 </p>
-<h1 align="center">gray-quality-of-life</h1>
-<p align="center">Detect the other agent tools you use, import their setup, and update everything in one go.</p>
+<h1 align="center">gray-extras</h1>
+<p align="center">Gray UX bundle: setup/migration, vim mode, themes, permissions, questions, secrets, skills, and updates.</p>
 <p align="center">
   <a href="https://github.com/vstaln/gray-qol/blob/main/LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <img alt="gray plugin" src="https://img.shields.io/badge/gray-plugin-7aa2f7.svg">
@@ -125,11 +125,19 @@ gray secrets elevate-setup                                print the lines that e
 
 `gray-askpass` is a sudo askpass helper. It reads the requesting command from its parent sudo process and the gray session id, shows both in a `/usr/bin/gnome-ssh-askpass` dialog, and appends an approved or cancelled line to the audit log. It never logs the password. `gray secrets elevate-setup` prints the lines to add to `~/.config/bspwm/bspwmrc` and `/etc/sudo.conf`; it does not change any file itself.
 
+## Skills
+
+Discovers agent skills across `~/.gray/skills`, `~/.claude/skills`, `~/.config/opencode`, `~/.agents/skills`, and project skill directories, injects a context-budgeted `<available_skills>` listing into the prompt, and exposes:
+
+- **`/skills [name|verb]`**: list installed skills, run a skill directly (`/skills <name> [args]`), toggle (`on`/`off`/`enable`/`disable`), `search`, `install`, or `remove`. Publishes dynamic per-command completions to `~/.gray/plugins/extras-completion.json`.
+- **`skill` tool**: lets the model load a skill's instructions on demand (expanding `${SKILL_DIR}` and `$ARGUMENTS`).
+- **`skills_search` / `skills_install` tools**: search npm (`keywords:agent-skills`), GitHub (`topic:agent-skills` / `SKILL.md`), and the `skills` CLI, and install verified `SKILL.md` packs into `~/.gray/skills/<name>/`.
+
 ## Install
 
 ```sh
 cargo build --release
-gray plugin install ./target/release/qol
+gray plugin install ./target/release/gray-extras
 ```
 
 ## Development

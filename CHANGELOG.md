@@ -3,6 +3,7 @@
 ## [0.4.0] - 2026-11-23
 
 ### Added
+- **Skills (`gray-skills` folded into `gray-extras`)**: skill discovery across `~/.gray/skills`, `~/.claude/skills`, `~/.config/opencode`, `~/.agents/skills`, and project skill dirs; `<available_skills>` prompt listing with context-budgeted description clipping; `skill`, `skills_search`, and `skills_install` tools; `/skills` slash command with dynamic per-command completion publishing.
 - **Secrets (`gray-secrets` folded into `gray-extras`)**: `secret_request` tool with masked inline terminal prompt (`host.secret` capability), `tool/before` placeholder rewriting into the `exec --env` wrapper, refusal of `secret-tool` and state-touching commands, required `tool/after` output masking (raw, base64, URL-encoded), 0600 session socket and reaper, `/secrets` slash command, `gray secrets set|rm|list|exec|elevate-setup` CLI routing, and `gray-askpass`.
 
 ## [0.3.0] - 2026-11-23

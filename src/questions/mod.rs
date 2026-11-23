@@ -46,7 +46,10 @@ pub fn tool_call(host: &Host, params: &Value) -> Value {
         Ok(q) => q,
         Err(e) => return json!({ "content": e, "is_error": true }),
     };
-    let blocking = args.get("blocking").and_then(Value::as_bool).unwrap_or(true);
+    let blocking = args
+        .get("blocking")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
     let ttl = if blocking { ASK_TTL } else { NONBLOCK_TTL };
     match host.call(
         HOST_ASK,

@@ -3,7 +3,7 @@ name = "gray-extras"
 version = "0.4.0"
 edition = "2024"
 license = "MIT"
-description = "Gray extras: UX bundle, vim mode, themes, permissions, questions, secrets, setup, and updates"
+description = "Gray extras: UX bundle, vim mode, themes, permissions, questions, secrets, skills, setup, and updates"
 
 [[bin]]
 name = "gray-extras"

@@ -18,6 +18,7 @@ mod secrets;
 mod sessions;
 mod settings;
 mod setup;
+mod skills;
 mod sources;
 mod state;
 mod status_command;
@@ -56,6 +57,7 @@ const USAGE: &str = "/extras               sessions, features, detected tools, u
 /theme [name]         pick or set a color theme (alias: /palettes)\n\
 /permissions [mode]   view or change tool approval mode (aliases: /perms, /access)\n\
 /secrets              list secret names, lifetimes and last use (never values)\n\
+/skills [name|verb]   list, run, search, install and toggle agent skills\n\
 /cd [path]            change gray's working directory and resume here (alias: /chdir)";
 
 const COMMANDS: &[(&str, &str)] = &[
@@ -87,6 +89,7 @@ const COMMANDS: &[(&str, &str)] = &[
         "/secrets",
         "list secret names, lifetimes and last use (never values)",
     ),
+    ("/skills", "list, search, install and toggle skills"),
 ];
 
 fn manifest() -> Value {
@@ -118,12 +121,14 @@ fn manifest() -> Value {
         commands.push(name);
         completion.push(template.name.clone());
     }
+    let mut tools = vec![questions::tool_def(), secrets::tool_def()];
+    tools.extend(skills::tool_defs());
     json!({
         "name": PLUGIN_NAME,
         "version": env!("CARGO_PKG_VERSION"),
         "protocol": PROTOCOL,
-        "description": "Gray extras: UX bundle, vim mode, themes, permissions, questions, secrets, setup, and updates",
-        "tools": [questions::tool_def(), secrets::tool_def()],
+        "description": "Gray extras: UX bundle, vim mode, themes, permissions, questions, secrets, skills, setup, and updates",
+        "tools": tools,
         "commands": commands,
         "command_descriptions": descriptions,
         "turn_local": {
@@ -165,7 +170,14 @@ fn manifest() -> Value {
         ],
         "settings": settings::manifest_rows(),
         "completion": completion,
-        "command_completions": {"/export": ["clip", "md", "txt", "help"], "/secrets": ["set", "rm", "list", "exec", "elevate-setup"], "/permissions": ["auto", "full", "bypass", "read-only"], "/perms": ["auto", "full", "bypass", "read-only"], "/access": ["auto", "full", "bypass", "read-only"]},
+        "command_completions": {
+            "/export": ["clip", "md", "txt", "help"],
+            "/secrets": ["set", "rm", "list", "exec", "elevate-setup"],
+            "/skills": skills::verb_completions(),
+            "/permissions": ["auto", "full", "bypass", "read-only"],
+            "/perms": ["auto", "full", "bypass", "read-only"],
+            "/access": ["auto", "full", "bypass", "read-only"],
+        },
     })
 }
 
@@ -228,6 +240,9 @@ fn command_run(host: &Host, gate: &permissions::ApprovalGate, params: &Value) ->
     }
     if name == "/secrets" {
         return secrets::command();
+    }
+    if name == skills::COMMAND {
+        return skills::command(params);
     }
     if name == "/setup" {
         let words: Vec<&str> = argv.iter().map(String::as_str).collect();
@@ -354,18 +369,37 @@ fn handle(
     params: &Value,
 ) -> Value {
     match method {
-        "plugin/manifest" => json!({"id": id, "result": manifest()}),
+        "plugin/manifest" => {
+            skills::publish_completion_for_params(params);
+            json!({"id": id, "result": manifest()})
+        }
         "command/run" => json!({"id": id, "result": command_run(host, gate, params)}),
         "input/key" => json!({"id": id, "result": input_key(vim_state, params)}),
         "tool/before" => json!({"id": id, "result": tool_before(host, gate, params)}),
         "tool/after" => json!({"id": id, "result": secrets::tool_after(params)}),
-        "prompt/context" => json!({"id": id, "result": {"text": questions::prompt_guidance()}}),
+        "prompt/context" => {
+            let mut parts = Vec::new();
+            let guidance = questions::prompt_guidance();
+            if !guidance.is_empty() {
+                parts.push(guidance.to_string());
+            }
+            if let Some(listing) = skills::prompt_context(params)
+                && !listing.is_empty()
+            {
+                parts.push(listing);
+            }
+            json!({"id": id, "result": {"text": parts.join("
+
+")}})
+        }
         "tool/call" => {
             let name = params.get("name").and_then(Value::as_str).unwrap_or("");
             let result = if name == questions::TOOL_NAME || name.is_empty() {
                 questions::tool_call(host, params)
             } else if name == secrets::TOOL_NAME {
                 secrets::tool_call(host, params)
+            } else if skills::TOOLS.contains(&name) {
+                skills::tool_call(name, params)
             } else {
                 json!({"content": format!("unknown tool: {name}"), "is_error": true})
             };
@@ -431,7 +465,10 @@ fn sidecar() {
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
-        Some("manifest") => println!("{}", manifest()),
+        Some("manifest") => {
+            skills::publish_completion_cwd();
+            println!("{}", manifest());
+        }
         Some("sidecar") => sidecar(),
         Some("update") => update::cli(),
         Some("usage") | Some("cost") => {
@@ -476,5 +513,42 @@ fn main() {
             eprintln!("gray-extras is a gray plugin sidecar — install with `gray plugin install`");
         }
         None => sidecar(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manifest_includes_skills_secrets_and_questions() {
+        let m = manifest();
+        assert_eq!(m["name"], "extras");
+        let commands: Vec<&str> = m["commands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        assert!(commands.contains(&"/skills"));
+        assert!(commands.contains(&"/secrets"));
+        assert!(commands.contains(&"/extras"));
+        let tools: Vec<&str> = m["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|t| t["name"].as_str())
+            .collect();
+        assert_eq!(
+            tools,
+            [
+                "request_user_input",
+                "secret_request",
+                "skill",
+                "skills_search",
+                "skills_install",
+            ]
+        );
+        assert!(m["command_completions"]["/skills"].is_array());
     }
 }

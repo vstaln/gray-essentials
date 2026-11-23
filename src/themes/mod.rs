@@ -50,7 +50,10 @@ pub(crate) static THEMES: &[(&str, &str)] = &[
     ("ryu", include_str!("../../themes/ryu.json")),
     ("saga", include_str!("../../themes/saga.json")),
     ("sapphire", include_str!("../../themes/sapphire.json")),
-    ("shadesofjade", include_str!("../../themes/shadesofjade.json")),
+    (
+        "shadesofjade",
+        include_str!("../../themes/shadesofjade.json"),
+    ),
     ("solitude", include_str!("../../themes/solitude.json")),
     ("thegreek", include_str!("../../themes/thegreek.json")),
     ("turbonite", include_str!("../../themes/turbonite.json")),
