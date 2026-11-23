@@ -3,6 +3,7 @@ mod cd;
 mod copy;
 mod detect;
 mod export;
+mod guard;
 mod host;
 mod hotkeys;
 mod intro;
@@ -14,6 +15,7 @@ mod permissions;
 mod prompt;
 mod questions;
 mod recap;
+mod repguard;
 mod secrets;
 mod sessions;
 mod settings;
@@ -82,6 +84,16 @@ const PARTS: &[parts::Part] = &[
         name: "permissions",
         default: true,
         description: "tool approval modes and the approval prompt",
+    },
+    parts::Part {
+        name: "guard",
+        default: true,
+        description: "warn about dangerous code patterns in files being written",
+    },
+    parts::Part {
+        name: "repguard",
+        default: true,
+        description: "nudge the agent out of identical repeated tool calls",
     },
     parts::Part {
         name: "questions",
@@ -231,6 +243,17 @@ const COMMANDS: &[(&str, &str, &str)] = &[
     ),
     ("permissions", "/perms", "alias for /permissions"),
     ("permissions", "/access", "alias for /permissions"),
+    (
+        "permissions",
+        "/confirm",
+        "list or toggle dangerous-command prompts",
+    ),
+    ("permissions", "/gate", "deny tools by name, permanently"),
+    (
+        "repguard",
+        "/repguard",
+        "show the repeated-call guard status",
+    ),
     (
         "secrets",
         "/secrets",
@@ -405,10 +428,10 @@ fn manifest(parts: &parts::Parts) -> Value {
     if parts.on("vim") {
         hooks.push("input/key");
     }
-    if parts.on("secrets") || parts.on("permissions") {
+    if parts.on("secrets") || parts.on("permissions") || parts.on("guard") || parts.on("repguard") {
         hooks.push("tool/before");
     }
-    if parts.on("secrets") {
+    if parts.on("secrets") || parts.on("guard") || parts.on("repguard") {
         hooks.push("tool/after");
     }
     if parts.on("questions") || parts.on("skills") {
@@ -465,11 +488,12 @@ fn manifest(parts: &parts::Parts) -> Value {
     if parts.on("secrets") {
         capabilities.push("host.secret");
     }
-    let required_hooks: Vec<&str> = if parts.on("secrets") {
-        vec!["tool/after"]
-    } else {
-        Vec::new()
-    };
+    let required_hooks: Vec<&str> =
+        if parts.on("secrets") || parts.on("guard") || parts.on("repguard") {
+            vec!["tool/after"]
+        } else {
+            Vec::new()
+        };
     json!({
         "name": PLUGIN_NAME,
         "version": env!("CARGO_PKG_VERSION"),
@@ -557,11 +581,14 @@ fn command_run(
     {
         return json!({"text": format!("unknown command {name}")});
     }
+    if name == "/repguard" && parts.on("repguard") {
+        return json!({"text": repguard::command(&argv, params)});
+    }
     if (name == "/theme" || name == "/palettes") && parts.on("themes") {
         return themes::command(host, name, &argv);
     }
     if permissions::COMMANDS.contains(&name) && parts.on("permissions") {
-        return permissions::command(gate, &argv);
+        return permissions::command(name, gate, &argv);
     }
     if name == "/secrets" && parts.on("secrets") {
         return secrets::command();
@@ -715,6 +742,15 @@ fn tool_before(
     params: &Value,
     parts: &parts::Parts,
 ) -> Value {
+    if parts.on("guard") {
+        let verdict = guard::tool_before(params);
+        if verdict.get("decision").and_then(Value::as_str) == Some("deny") {
+            return verdict;
+        }
+    }
+    if parts.on("repguard") {
+        repguard::tool_before(params);
+    }
     if parts.on("secrets")
         && let Some(denied) = secrets::precheck(params)
     {
@@ -749,6 +785,22 @@ fn tool_before(
     }
 }
 
+fn merge_after(mut base: Value, next: Value) -> Value {
+    let Some(add) = next.get("content").and_then(Value::as_str) else {
+        return base;
+    };
+    if add.is_empty() {
+        return base;
+    }
+    let joined = format!(
+        "{}{}",
+        base.get("content").and_then(Value::as_str).unwrap_or(""),
+        add
+    );
+    base["content"] = json!(joined);
+    base
+}
+
 fn handle(
     host: &Host,
     vim_state: &Mutex<VimState>,
@@ -769,11 +821,16 @@ fn handle(
         "input/key" => json!({"id": id, "result": input_key(vim_state, params, enabled)}),
         "tool/before" => json!({"id": id, "result": tool_before(host, gate, params, enabled)}),
         "tool/after" => {
-            let result = if enabled.on("secrets") {
-                secrets::tool_after(params)
-            } else {
-                json!({})
-            };
+            let mut result = json!({});
+            if enabled.on("repguard") {
+                result = merge_after(result, repguard::tool_after(params));
+            }
+            if enabled.on("guard") {
+                result = merge_after(result, guard::tool_after(params));
+            }
+            if enabled.on("secrets") {
+                result = merge_after(result, secrets::tool_after(params));
+            }
             json!({"id": id, "result": result})
         }
         "prompt/context" => {

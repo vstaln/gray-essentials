@@ -1,6 +1,6 @@
 [package]
 name = "gray-extras"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 license = "MIT"
 description = "Gray extras: UX bundle, vim mode, themes, permissions, questions, secrets, skills, setup, and updates"
@@ -12,7 +12,9 @@ path = "src/main.rs"
 [dependencies]
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }
+fancy-regex = "0.14"
 serde_json = "1"
+regex = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 toml = "0.8"
 crossterm = "0.28"
