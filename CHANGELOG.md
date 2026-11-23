@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.0] - 2026-11-23
+
+### Added
+- **Secrets (`gray-secrets` folded into `gray-extras`)**: `secret_request` tool with masked inline terminal prompt (`host.secret` capability), `tool/before` placeholder rewriting into the `exec --env` wrapper, refusal of `secret-tool` and state-touching commands, required `tool/after` output masking (raw, base64, URL-encoded), 0600 session socket and reaper, `/secrets` slash command, `gray secrets set|rm|list|exec|elevate-setup` CLI routing, and `gray-askpass`.
+
+## [0.3.0] - 2026-11-23
+
+### Changed
+- Renamed package to `gray-extras` (`extras`) and folded vim mode, themes, permissions, and questions.
+
 ## [0.2.0] - 2026-11-15
 
 ### Added

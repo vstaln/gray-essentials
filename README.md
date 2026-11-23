@@ -83,6 +83,48 @@ into gray core now lives here, on top of the generic host API core exposes.
 The plugin writes only under `$GRAY_HOME` (default `~/.gray`), and only
 after you say yes.
 
+## Secrets
+
+A gray plugin that lets an agent use secrets without ever seeing them. The values live in the desktop keyring (libsecret, through `secret-tool`, with the attributes `service=gray-secrets name=NAME`) or, for the current session only, in the plugin's memory.
+
+### How an agent gets a secret
+
+The agent calls the `secret_request` tool with a name and a purpose. Gray shows a masked field inline in the terminal, and the user types the value there. The user alone can press Tab to tick "Save permanently", which stores the value in the keyring; otherwise the plugin keeps it in memory until the session ends. The value travels from gray's UI to the plugin process only, and the tool result the model sees is `{"name": ..., "status": "stored" | "session" | "declined"}`.
+
+When there is no interactive terminal (print mode, gateway, Discord or Telegram sessions), the prompt is refused and the agent is told to ask the user to run `gray secrets set NAME` in a terminal. A value is never collected through a chat channel.
+
+The prompt needs the `host.secret` capability: `gray plugin capabilities extras --all`.
+
+### Using a secret
+
+The agent writes `{{secret:NAME}}` in a bash command. The plugin's tool/before hook rewrites the command so that it runs inside `gray-extras exec --env NAME -- bash -c '...'`, with the placeholder replaced by `"${NAME}"`. The value is therefore never part of the command text, and it exists only in the child's environment. The wrapper replaces every value, its base64 form and its URL-encoded form with `<secret:NAME>` in the child's stdout and stderr, and it returns the child's exit code unchanged. The tool/after hook, which the manifest marks as required, masks the same values in all other tool output, and gray withholds the output if the hook fails.
+
+Bash commands that call `secret-tool` or touch the plugin's own state are refused with an explanation.
+
+Session values reach the wrapper over a 0600 unix socket in `$XDG_RUNTIME_DIR/gray-secrets/`, authorised by a random per-session token. A small reaper process removes the socket and the plugin's ledger when gray exits. If the plugin restarts mid-session, it no longer holds session values, so tool/after withholds output until they are requested again.
+
+Values shorter than 6 characters are not masked, and the plugin warns about them.
+
+### Command line
+
+```
+gray secrets set NAME                                     store a secret (typed without echo)
+gray secrets rm NAME                                      delete a stored secret
+gray secrets list                                         names, lifetime, created, last used
+gray secrets exec --env NAME[,NAME] [--file NAME] -- CMD  run CMD with secrets injected, output masked
+gray secrets elevate-setup                                print the lines that enable gray-askpass
+```
+
+`--file NAME` writes the value to a 0600 file inside a 0700 directory under `$XDG_RUNTIME_DIR`, passes its path to the child as `NAME_FILE`, and deletes it on exit.
+
+### Audit log
+
+`~/.gray/secrets/audit.log` is append-only and records the time, session id, secret name, action (`set`, `use`, `deny`, `rm`, `request`) and the first 80 characters of the command with values masked. It never records values. Metadata for permanent secrets (created, last used) is kept in `~/.gray/secrets/index.json`.
+
+### Elevation
+
+`gray-askpass` is a sudo askpass helper. It reads the requesting command from its parent sudo process and the gray session id, shows both in a `/usr/bin/gnome-ssh-askpass` dialog, and appends an approved or cancelled line to the audit log. It never logs the password. `gray secrets elevate-setup` prints the lines to add to `~/.config/bspwm/bspwmrc` and `/etc/sudo.conf`; it does not change any file itself.
+
 ## Install
 
 ```sh

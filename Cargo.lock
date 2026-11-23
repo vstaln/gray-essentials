@@ -199,11 +199,12 @@ dependencies = [
 
 [[package]]
 name = "gray-extras"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "crossterm",
  "image",
+ "libc",
  "serde",
  "serde_json",
  "tempfile",

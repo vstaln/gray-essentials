@@ -1,0 +1,18 @@
+#!/bin/sh
+cmd=$(tr '\0' ' ' < "/proc/$PPID/cmdline" 2>/dev/null)
+cmd=${cmd% }
+session=${GRAY_SESSION_ID:-none}
+dir="${GRAY_HOME:-$HOME/.gray}/secrets"
+mkdir -p "$dir" && chmod 700 "$dir"
+ask=/usr/bin/gnome-ssh-askpass
+[ -x "$ask" ] || ask=/usr/libexec/gcr4-ssh-askpass
+if pw=$("$ask" "gray session $session asks to run as root:
+$cmd"); then
+    result=approved
+else
+    result=cancelled
+fi
+short=$(printf '%s' "$cmd" | tr '\t\n' '  ' | cut -c1-80)
+(umask 077; printf '%s\tsession=%s\tname=-\taction=elevate-%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$session" "$result" "$short" >> "$dir/audit.log")
+[ "$result" = approved ] || exit 1
+printf '%s\n' "$pw"

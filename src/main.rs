@@ -14,6 +14,7 @@ mod permissions;
 mod prompt;
 mod questions;
 mod recap;
+mod secrets;
 mod sessions;
 mod settings;
 mod setup;
@@ -54,6 +55,7 @@ const USAGE: &str = "/extras               sessions, features, detected tools, u
 \n\
 /theme [name]         pick or set a color theme (alias: /palettes)\n\
 /permissions [mode]   view or change tool approval mode (aliases: /perms, /access)\n\
+/secrets              list secret names, lifetimes and last use (never values)\n\
 /cd [path]            change gray's working directory and resume here (alias: /chdir)";
 
 const COMMANDS: &[(&str, &str)] = &[
@@ -81,6 +83,10 @@ const COMMANDS: &[(&str, &str)] = &[
     ("/permissions", "view or set tool approval mode"),
     ("/perms", "alias for /permissions"),
     ("/access", "alias for /permissions"),
+    (
+        "/secrets",
+        "list secret names, lifetimes and last use (never values)",
+    ),
 ];
 
 fn manifest() -> Value {
@@ -116,8 +122,8 @@ fn manifest() -> Value {
         "name": PLUGIN_NAME,
         "version": env!("CARGO_PKG_VERSION"),
         "protocol": PROTOCOL,
-        "description": "Gray extras: UX bundle, vim mode, themes, permissions, questions, setup, and updates",
-        "tools": [questions::tool_def()],
+        "description": "Gray extras: UX bundle, vim mode, themes, permissions, questions, secrets, setup, and updates",
+        "tools": [questions::tool_def(), secrets::tool_def()],
         "commands": commands,
         "command_descriptions": descriptions,
         "turn_local": {
@@ -131,6 +137,7 @@ fn manifest() -> Value {
             "/permissions": ["*"],
             "/perms": ["*"],
             "/access": ["*"],
+            "/secrets": ["*"],
         },
         "hooks": [
             "session_start",
@@ -138,8 +145,10 @@ fn manifest() -> Value {
             "user_return",
             "input/key",
             "tool/before",
+            "tool/after",
             "prompt/context",
         ],
+        "required_hooks": ["tool/after"],
         "first_run": true,
         "capabilities": [
             "host.say",
@@ -152,10 +161,11 @@ fn manifest() -> Value {
             "plugins.manage",
             "host.ask",
             "host.restart",
+            "host.secret",
         ],
         "settings": settings::manifest_rows(),
         "completion": completion,
-        "command_completions": {"/export": ["clip", "md", "txt", "help"]},
+        "command_completions": {"/export": ["clip", "md", "txt", "help"], "/secrets": ["set", "rm", "list", "exec", "elevate-setup"]},
     })
 }
 
@@ -204,11 +214,7 @@ fn input_key(vim_state: &Mutex<VimState>, params: &Value) -> Value {
     reply.to_json()
 }
 
-fn command_run(
-    host: &Host,
-    gate: &permissions::ApprovalGate,
-    params: &Value,
-) -> Value {
+fn command_run(host: &Host, gate: &permissions::ApprovalGate, params: &Value) -> Value {
     let name = params
         .get("name")
         .and_then(Value::as_str)
@@ -219,6 +225,9 @@ fn command_run(
     }
     if permissions::COMMANDS.contains(&name) {
         return permissions::command(gate, &argv);
+    }
+    if name == "/secrets" {
+        return secrets::command();
     }
     if name == "/setup" {
         let words: Vec<&str> = argv.iter().map(String::as_str).collect();
@@ -313,6 +322,29 @@ fn on_event(host: &Arc<Host>, params: &Value) {
     }
 }
 
+fn tool_before(host: &Host, gate: &permissions::ApprovalGate, params: &Value) -> Value {
+    if let Some(denied) = secrets::precheck(params) {
+        return denied;
+    }
+    let verdict = permissions::tool_before(host, gate, params);
+    match verdict.get("decision").and_then(Value::as_str) {
+        Some("allow") => secrets::tool_before(params),
+        Some("modify") => {
+            let mut modified = params.clone();
+            if let Some(args) = verdict.get("args") {
+                modified["args"] = args.clone();
+            }
+            let after = secrets::tool_before(&modified);
+            if after.get("decision").and_then(Value::as_str) == Some("allow") {
+                verdict
+            } else {
+                after
+            }
+        }
+        _ => verdict,
+    }
+}
+
 fn handle(
     host: &Host,
     vim_state: &Mutex<VimState>,
@@ -325,12 +357,15 @@ fn handle(
         "plugin/manifest" => json!({"id": id, "result": manifest()}),
         "command/run" => json!({"id": id, "result": command_run(host, gate, params)}),
         "input/key" => json!({"id": id, "result": input_key(vim_state, params)}),
-        "tool/before" => json!({"id": id, "result": permissions::tool_before(host, gate, params)}),
+        "tool/before" => json!({"id": id, "result": tool_before(host, gate, params)}),
+        "tool/after" => json!({"id": id, "result": secrets::tool_after(params)}),
         "prompt/context" => json!({"id": id, "result": {"text": questions::prompt_guidance()}}),
         "tool/call" => {
             let name = params.get("name").and_then(Value::as_str).unwrap_or("");
             let result = if name == questions::TOOL_NAME || name.is_empty() {
                 questions::tool_call(host, params)
+            } else if name == secrets::TOOL_NAME {
+                secrets::tool_call(host, params)
             } else {
                 json!({"content": format!("unknown tool: {name}"), "is_error": true})
             };
@@ -344,6 +379,7 @@ fn handle(
 }
 
 fn sidecar() {
+    secrets::init();
     let host = Arc::new(Host::new());
     let vim_state = Arc::new(Mutex::new(VimState::default()));
     let gate = Arc::new(permissions::new_gate());
@@ -356,6 +392,10 @@ fn sidecar() {
         };
         let method = v.get("method").and_then(Value::as_str).unwrap_or("");
         if method == "plugin/shutdown" {
+            secrets::cleanup();
+            if let Some(id) = v.get("id").cloned() {
+                host.write(&json!({"id": id, "result": {}}));
+            }
             break;
         }
         if method.is_empty() {
@@ -381,9 +421,11 @@ fn sidecar() {
             host.write(&reply);
         }));
     }
+    host.close();
     for w in workers {
         let _ = w.join();
     }
+    secrets::cleanup();
 }
 
 fn main() {
@@ -424,6 +466,10 @@ fn main() {
                 "{}",
                 detect::scanned_report()["text"].as_str().unwrap_or("")
             )
+        }
+        Some("secrets") => std::process::exit(secrets::run_cli(&args[1..])),
+        Some("set" | "rm" | "list" | "exec" | "elevate-setup" | "reap") => {
+            std::process::exit(secrets::run_cli(&args))
         }
         Some(_) => println!("{USAGE}"),
         None if std::io::stdin().is_terminal() => {
