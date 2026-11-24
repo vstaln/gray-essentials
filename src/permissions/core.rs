@@ -26,8 +26,6 @@ pub const MODE_FULL: &str = "full";
 pub const PLUGIN_NAME: &str = "permissions";
 /// Protocol version claimed in `plugin/manifest`.
 pub const PROTOCOL: &str = "1.1";
-/// Slash commands claimed in `plugin/manifest`.
-pub const COMMANDS: &[&str] = &["/permissions", "/perms", "/access"];
 /// Hook claimed in `plugin/manifest`.
 pub const HOOK_TOOL_BEFORE: &str = "tool/before";
 
@@ -534,8 +532,8 @@ pub fn manifest() -> serde_json::Value {
         "protocol": PROTOCOL,
         "tools": [],
         "description": "choose how tool calls get approved",
-        "commands": COMMANDS,
-        "command_descriptions": {"/permissions": "choose how tool calls get approved", "/perms": "choose how tool calls get approved", "/access": "choose how tool calls get approved"},
+        "commands": ["/permissions", "/perms", "/access"],
+        "command_descriptions": {"/permissions": "choose how tool calls get approved", "/perms": "choose how tool calls get approved", "/access": "choose how tool calls get approved", "/confirm": "list or toggle dangerous-command prompts", "/gate": "deny tools by name, permanently"},
         "hooks": [HOOK_TOOL_BEFORE],
         // `host/ask` is a gated host surface: undeclared, gray refuses it
         // (`capability_not_granted`) and every Ask verdict became a deny.
