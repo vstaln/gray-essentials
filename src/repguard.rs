@@ -1,5 +1,3 @@
-//! Repetition guard for tool calls, ported from gray-repguard.
-//!
 //! `tool/before` hashes (name, canonicalized-args) and counts consecutive
 //! repeats per session. When the same call runs `REPGUARD_MAX_REPEATS`
 //! (default 3) times in a row, `tool/after` appends a "you are looping,

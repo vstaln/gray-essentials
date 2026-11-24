@@ -1,17 +1,5 @@
-//! Security warnings on file writes, ported from gray-guard.
-//!
-//! Scans the content written by write/edit/patch-shaped tools — and bash
-//! heredoc writes — for ~25 dangerous-code patterns (eval(, pickle.load,
 //! yaml.load sans SafeLoader, os.system, subprocess shell=True,
-//! dangerouslySetInnerHTML, verify=False, ECB, XXE parsers, GitHub Actions
 //! ${{ github.event.* }} injection, torch.load sans weights_only, …).
-//!
-//! `tool/after` carries no args, so `tool/before` stashes the last write's
-//! (path, content) per (session, tool) in memory and `tool/after` appends a
-//! `⚠️ Security warning:` block to the result — non-blocking, the file is
-//! already written; the model self-corrects. `SECURITY_GUIDANCE_BLOCK=1`
-//! instead denies in `tool/before`. `SECURITY_GUIDANCE_DISABLE=1` turns it
-//! off. Scan cap: 256 KiB per string arg.
 
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
