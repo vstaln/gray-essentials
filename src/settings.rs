@@ -2,7 +2,8 @@ use serde_json::{Value, json};
 
 use crate::paths;
 
-pub const NAME: &str = "extras";
+pub const NAME: &str = "essentials";
+const FORMER_NAME: &str = "extras";
 const LEGACY_NAME: &str = "quality-of-life";
 
 enum Kind {
@@ -118,6 +119,7 @@ fn store_path() -> std::path::PathBuf {
 fn stored_all() -> serde_json::Map<String, Value> {
     let dir = paths::gray_home().join("plugin-settings");
     std::fs::read_to_string(dir.join(format!("{NAME}.json")))
+        .or_else(|_| std::fs::read_to_string(dir.join(format!("{FORMER_NAME}.json"))))
         .or_else(|_| std::fs::read_to_string(dir.join(format!("{LEGACY_NAME}.json"))))
         .ok()
         .and_then(|t| serde_json::from_str::<Value>(&t).ok())

@@ -109,7 +109,7 @@ pub fn elevate_setup() -> i32 {
                 .find(|p| p.is_file())
         })
         .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "/path/to/gray-extras/gray-askpass".into());
+        .unwrap_or_else(|| "/path/to/gray-essentials/gray-askpass".into());
     println!("gray-secrets does not edit system files. Add these lines yourself.");
     println!();
     println!("1. Polkit agent: add after the nm-applet line in ~/.config/bspwm/bspwmrc");

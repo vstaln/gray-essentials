@@ -1,4 +1,4 @@
-//! Skills inside gray-extras — discovery, the model-facing listing, the
+//! Skills inside gray-essentials — discovery, the model-facing listing, the
 //! `skill` tool, `/skills`, and the hub search/installer (`skills_search`,
 //! `skills_install`).
 
@@ -16,7 +16,7 @@ const CLI_SECS: &str = "15";
 const MAX_TARBALL: usize = 50 * 1024 * 1024;
 const MAX_OUT: usize = 7 * 1024;
 const PER_SOURCE: usize = 10;
-const UA: &str = "gray-extras/0.4 (+https://github.com/vstaln/gray-extras)";
+const UA: &str = "gray-essentials/0.4 (+https://github.com/vstaln/gray-essentials)";
 
 const VERBS: [(&str, &str); 8] = [
     ("list", "list installed skills"),
@@ -84,7 +84,7 @@ pub fn verb_completions() -> Vec<Value> {
         .collect()
 }
 
-/// `/skills <name>` completions: gray reads `plugins/extras-completion.json`
+/// `/skills <name>` completions: gray reads `plugins/essentials-completion.json`
 /// (`command_completions["/skills"]`) and refreshes its popup when the file
 /// changes. Rewritten only on change.
 fn completion_body(skills: &[catalog::Skill]) -> String {
@@ -109,11 +109,11 @@ fn publish_completion(skills: &[catalog::Skill]) {
     }
     let body = completion_body(skills);
     let dir = crate::paths::gray_home().join("plugins");
-    let path = dir.join("extras-completion.json");
+    let path = dir.join("essentials-completion.json");
     if std::fs::read_to_string(&path).is_ok_and(|old| old == body) {
         return;
     }
-    let tmp = dir.join(format!("extras-completion.json.{}", std::process::id()));
+    let tmp = dir.join(format!("essentials-completion.json.{}", std::process::id()));
     if std::fs::create_dir_all(&dir).is_ok() && std::fs::write(&tmp, &body).is_ok() {
         let _ = std::fs::rename(&tmp, &path);
     }
@@ -1153,7 +1153,7 @@ mod tests {
 
     fn fixture() -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "gray-extras-skills-test-{}-{}",
+            "gray-essentials-skills-test-{}-{}",
             std::process::id(),
             FIXTURE_SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
         ));

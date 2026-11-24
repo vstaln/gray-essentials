@@ -43,20 +43,20 @@ use vim::{Press, State as VimState};
 
 mod parts;
 
-pub const PLUGIN_NAME: &str = "extras";
+pub const PLUGIN_NAME: &str = "essentials";
 pub const PROTOCOL: &str = "1.1";
-pub const COMMAND: &str = "/extras";
+pub const COMMAND: &str = "/essentials";
 
 pub const WELCOME: &str = "Welcome to gray by alignment\ngray is a minimal agent that runs tools, edits code, and works with any model provider.";
 
-const USAGE: &str = "/extras               sessions, features, detected tools, updates (alias: /qol)\n\
-/extras setup [tool]  import rules, skills, MCP servers and a subscription plugin\n\
-/extras undo [n]      revert the last n imports (default 1)\n\
-/extras dismiss <t>   never mention a detected tool again\n\
-/extras scanned       what the detector looked at and found\n\
-/extras update        update provider CLIs, plugins and gray in one go\n\
-/extras first-run     the first-run welcome\n\
-/extras sessions dismiss  clear the interrupted-session hint\n\
+const USAGE: &str = "/essentials               sessions, features, detected tools, updates (alias: /qol)\n\
+/essentials setup [tool]  import rules, skills, MCP servers and a subscription plugin\n\
+/essentials undo [n]      revert the last n imports (default 1)\n\
+/essentials dismiss <t>   never mention a detected tool again\n\
+/essentials scanned       what the detector looked at and found\n\
+/essentials update        update provider CLIs, plugins and gray in one go\n\
+/essentials first-run     the first-run welcome\n\
+/essentials sessions dismiss  clear the interrupted-session hint\n\
 \n\
 /theme [name]         pick or set a color theme (alias: /palettes)\n\
 /permissions [mode]   view or change tool approval mode (aliases: /perms, /access)\n\
@@ -68,7 +68,7 @@ const PARTS: &[parts::Part] = &[
     parts::Part {
         name: "quality-of-life",
         default: true,
-        description: "the /extras panel and first-run welcome",
+        description: "the /essentials panel and first-run welcome",
     },
     parts::Part {
         name: "vim",
@@ -210,10 +210,10 @@ const PARTS: &[parts::Part] = &[
 const COMMANDS: &[(&str, &str, &str)] = &[
     (
         "quality-of-life",
-        "/extras",
+        "/essentials",
         "sessions, features, detected tools, and updates",
     ),
-    ("quality-of-life", "/qol", "alias for /extras"),
+    ("quality-of-life", "/qol", "alias for /essentials"),
     (
         "setup",
         "/setup",
@@ -286,7 +286,7 @@ const TURN_LOCAL: &[(&str, &str, &[&str])] = &[
     ("export", "/export", &["*"]),
     ("hotkeys", "/hotkeys", &["*"]),
     ("intro", "/intro", &["*"]),
-    ("quality-of-life", "/extras", &["scanned"]),
+    ("quality-of-life", "/essentials", &["scanned"]),
     ("quality-of-life", "/qol", &["scanned"]),
     ("permissions", "/permissions", &["*"]),
     ("permissions", "/perms", &["*"]),
@@ -498,7 +498,7 @@ fn manifest(parts: &parts::Parts) -> Value {
         "name": PLUGIN_NAME,
         "version": env!("CARGO_PKG_VERSION"),
         "protocol": PROTOCOL,
-        "description": "Gray extras: UX bundle, vim mode, themes, permissions, questions, secrets, skills, setup, and updates",
+        "description": "Gray essentials: UX bundle, vim mode, themes, permissions, questions, secrets, skills, setup, and updates",
         "tools": tools,
         "commands": commands,
         "command_descriptions": descriptions,
@@ -649,16 +649,16 @@ fn command_run(
         ["undo"] if parts.on("setup") => setup::undo(1),
         ["undo", n] if parts.on("setup") => match n.parse::<usize>() {
             Ok(n) if n > 0 => setup::undo(n),
-            _ => json!({"text": "usage: /extras undo [n]"}),
+            _ => json!({"text": "usage: /essentials undo [n]"}),
         },
         ["dismiss", tool] if parts.on("setup") => setup::dismiss(tool),
-        ["dismiss"] if parts.on("setup") => json!({"text": "usage: /extras dismiss <tool>"}),
+        ["dismiss"] if parts.on("setup") => json!({"text": "usage: /essentials dismiss <tool>"}),
         ["scanned"] if parts.on("detect") => detect::scanned_report(),
         ["update", ..] if parts.on("update") => update::run(host, &session),
         ["first-run"] if parts.on("setup") => setup::first_run(host),
         ["sessions", "dismiss"] if parts.on("sessions") => sessions::dismiss_command(host, params),
         ["sessions"] if parts.on("sessions") => {
-            json!({"text": "usage: /extras sessions dismiss"})
+            json!({"text": "usage: /essentials sessions dismiss"})
         }
         _ => json!({"text": format!("unknown: {name} {}\n{USAGE}", argv.join(" "))}),
     }
@@ -930,7 +930,7 @@ fn sidecar(enabled: Arc<parts::Parts>) {
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let enabled = parts::Parts::load("extras", PARTS);
+    let enabled = parts::Parts::load("essentials", PARTS);
     let disabled = |part: &str| !enabled.on(part);
     match args.first().map(String::as_str) {
         Some("manifest") => {
@@ -993,7 +993,9 @@ fn main() {
         }
         Some(_) => println!("{USAGE}"),
         None if std::io::stdin().is_terminal() => {
-            eprintln!("gray-extras is a gray plugin sidecar — install with `gray plugin install`");
+            eprintln!(
+                "gray-essentials is a gray plugin sidecar — install with `gray plugin install`"
+            );
         }
         None => sidecar(Arc::new(enabled)),
     }
@@ -1005,8 +1007,8 @@ mod tests {
 
     #[test]
     fn manifest_includes_skills_secrets_and_questions() {
-        let m = manifest(&parts::Parts::load("extras", PARTS));
-        assert_eq!(m["name"], "extras");
+        let m = manifest(&parts::Parts::load("essentials", PARTS));
+        assert_eq!(m["name"], "essentials");
         let commands: Vec<&str> = m["commands"]
             .as_array()
             .unwrap()
@@ -1015,7 +1017,7 @@ mod tests {
             .collect();
         assert!(commands.contains(&"/skills"));
         assert!(commands.contains(&"/secrets"));
-        assert!(commands.contains(&"/extras"));
+        assert!(commands.contains(&"/essentials"));
         let tools: Vec<&str> = m["tools"]
             .as_array()
             .unwrap()
