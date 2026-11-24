@@ -555,7 +555,7 @@ pub fn tool_before(params: &Value) -> Value {
     drop(st);
     let exe = std::env::current_exe()
         .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|_| "gray-extras".into());
+        .unwrap_or_else(|_| "gray-essentials".into());
     let inner = substitute(command, &spots);
     let rewritten = format!(
         "{prefix}{} exec --env {} -- bash -c {}",
@@ -619,7 +619,7 @@ pub fn tool_call(host: &Host, params: &Value) -> Value {
             util::audit(&sid, &name, "deny", "(no prompt)");
             if err.contains("capability_not_granted") {
                 return fail(format!(
-                    "gray-secrets may not open the masked prompt yet (the host.secret capability is not granted). Ask the user to run `gray plugin capabilities extras --all`, or to run `gray secrets set {name}` in a terminal."
+                    "gray-secrets may not open the masked prompt yet (the host.secret capability is not granted). Ask the user to run `gray plugin capabilities essentials --all`, or to run `gray secrets set {name}` in a terminal."
                 ));
             }
             return fail(NO_PROMPT.replace("{name}", &name));

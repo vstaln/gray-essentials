@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.0] - 2026-11-24
+
+### Changed
+- Renamed the package to `gray-essentials` (`essentials`) and the overview command to `/essentials`. Parts, part commands and on-disk state are unchanged; `~/.gray/qol/` and `/qol` keep working, and settings still read `extras.json`.
+
 ## [0.4.0] - 2026-11-23
 
 ### Added

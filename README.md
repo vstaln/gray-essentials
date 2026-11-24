@@ -1,7 +1,7 @@
 <p align="center">
   <img src="assets/gray-logo.svg" alt="gray" width="96">
 </p>
-<h1 align="center">gray-extras</h1>
+<h1 align="center">gray-essentials</h1>
 <p align="center">Gray UX bundle: setup/migration, vim mode, themes, permissions, questions, secrets, skills, and updates.</p>
 <p align="center">
   <a href="https://github.com/vstaln/gray-qol/blob/main/LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
@@ -93,11 +93,11 @@ The agent calls the `secret_request` tool with a name and a purpose. Gray shows 
 
 When there is no interactive terminal (print mode, gateway, Discord or Telegram sessions), the prompt is refused and the agent is told to ask the user to run `gray secrets set NAME` in a terminal. A value is never collected through a chat channel.
 
-The prompt needs the `host.secret` capability: `gray plugin capabilities extras --all`.
+The prompt needs the `host.secret` capability: `gray plugin capabilities essentials --all`.
 
 ### Using a secret
 
-The agent writes `{{secret:NAME}}` in a bash command. The plugin's tool/before hook rewrites the command so that it runs inside `gray-extras exec --env NAME -- bash -c '...'`, with the placeholder replaced by `"${NAME}"`. The value is therefore never part of the command text, and it exists only in the child's environment. The wrapper replaces every value, its base64 form and its URL-encoded form with `<secret:NAME>` in the child's stdout and stderr, and it returns the child's exit code unchanged. The tool/after hook, which the manifest marks as required, masks the same values in all other tool output, and gray withholds the output if the hook fails.
+The agent writes `{{secret:NAME}}` in a bash command. The plugin's tool/before hook rewrites the command so that it runs inside `gray-essentials exec --env NAME -- bash -c '...'`, with the placeholder replaced by `"${NAME}"`. The value is therefore never part of the command text, and it exists only in the child's environment. The wrapper replaces every value, its base64 form and its URL-encoded form with `<secret:NAME>` in the child's stdout and stderr, and it returns the child's exit code unchanged. The tool/after hook, which the manifest marks as required, masks the same values in all other tool output, and gray withholds the output if the hook fails.
 
 Bash commands that call `secret-tool` or touch the plugin's own state are refused with an explanation.
 
@@ -129,7 +129,7 @@ gray secrets elevate-setup                                print the lines that e
 
 Discovers agent skills across `~/.gray/skills`, `~/.claude/skills`, `~/.config/opencode`, `~/.agents/skills`, and project skill directories, injects a context-budgeted `<available_skills>` listing into the prompt, and exposes:
 
-- **`/skills [name|verb]`**: list installed skills, run a skill directly (`/skills <name> [args]`), toggle (`on`/`off`/`enable`/`disable`), `search`, `install`, or `remove`. Publishes dynamic per-command completions to `~/.gray/plugins/extras-completion.json`.
+- **`/skills [name|verb]`**: list installed skills, run a skill directly (`/skills <name> [args]`), toggle (`on`/`off`/`enable`/`disable`), `search`, `install`, or `remove`. Publishes dynamic per-command completions to `~/.gray/plugins/essentials-completion.json`.
 - **`skill` tool**: lets the model load a skill's instructions on demand (expanding `${SKILL_DIR}` and `$ARGUMENTS`).
 - **`skills_search` / `skills_install` tools**: search npm (`keywords:agent-skills`), GitHub (`topic:agent-skills` / `SKILL.md`), and the `skills` CLI, and install verified `SKILL.md` packs into `~/.gray/skills/<name>/`.
 
@@ -137,7 +137,7 @@ Discovers agent skills across `~/.gray/skills`, `~/.claude/skills`, `~/.config/o
 
 ```sh
 cargo build --release
-gray plugin install ./target/release/gray-extras
+gray plugin install ./target/release/gray-essentials
 ```
 
 ## Development

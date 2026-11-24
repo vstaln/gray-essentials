@@ -233,8 +233,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "gray-extras"
-version = "0.4.2"
+name = "gray-essentials"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "crossterm",
