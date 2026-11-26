@@ -52,7 +52,15 @@ into gray core now lives here, on top of the generic host API core exposes.
   since the last one.
 - **Prompt suggestions**: after a turn, the likely next message appears as
   ghost text in the composer; Enter on an empty line accepts it.
-- **Automatic session titles**: the first answered turn names the session.
+- **Automatic session titles**: the first answered turn names the session, and
+  the same turn gives it a short slug name for the session list and the mesh:
+  lowercase words, at most four, done to 48 characters, ending in four hex
+  digits hashed from the session id, such as `acp-usage-cache-7f3a`. Gray
+  stores the name opaquely through `host/session_name`.
+- **`session_rename` tool**: the agent renames its own session to fit its
+  current work the way it would name a subagent, in 2-4 words; the plugin
+  slugifies them the same way and keeps the session's hash suffix. It is off
+  whenever the `title` part or the auto-titles setting is off.
 - **Issue links**: `#123` in a reply becomes a link to the repo's issue or PR
   (from `git remote get-url origin`).
 - **Prompt templates**: `*.md` files in `.gray/prompts/` (project, up to the git

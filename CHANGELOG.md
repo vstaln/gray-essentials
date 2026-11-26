@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0] - 2026-11-25
+
+### Added
+- **Session names**: after a generated title is accepted, the plugin also names
+  the session itself: a 2-4 word slug of the title with stop-words dropped,
+  trimmed to 48 characters, ending in four hex digits of FNV-1a 64 over the
+  session id (`acp-usage-cache-7f3a`). The name goes out over the new
+  `host/session_name {name}` host method, declared under the existing
+  `session.write` capability.
+- **`session_rename` tool**: the agent renames its own session for the work at
+  hand, in 2-4 words; the plugin slugifies them and keeps the hash suffix. It
+  needs the `title` part, and answers with a plain error when the host does not
+  provide `host/session_name`.
+
 ## [0.5.0] - 2026-11-24
 
 ### Changed
