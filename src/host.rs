@@ -135,6 +135,10 @@ impl Host {
         ok_bool(self.call("host/session_title", json!({"title": title}), HOST_TTL))
     }
 
+    pub fn session_name(&self, name: &str) -> Result<Value, String> {
+        self.call("host/session_name", json!({"name": name}), HOST_TTL)
+    }
+
     pub fn inject(&self, text: &str) -> bool {
         self.call("host/inject", json!({"text": text}), HOST_TTL)
             .map(|v| v.get("ok").and_then(Value::as_bool).unwrap_or(true))

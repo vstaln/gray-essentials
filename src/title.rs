@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use serde_json::Value;
 
 use crate::host::Host;
+use crate::naming;
 use crate::prompt;
 use crate::settings;
 
@@ -47,8 +48,9 @@ pub fn turn_end(host: &Host, params: &Value) {
     if let Some(title) = host
         .complete(SYSTEM, &body, MAX_TOKENS)
         .and_then(|raw| title_from_reply(&raw))
+        && host.session_title(&title)
     {
-        host.session_title(&title);
+        let _ = host.session_name(&naming::build(&title, &session));
     }
 }
 

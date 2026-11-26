@@ -8,6 +8,7 @@ mod host;
 mod hotkeys;
 mod intro;
 mod links;
+mod naming;
 mod notify;
 mod panel;
 mod paths;
@@ -400,6 +401,9 @@ fn manifest(parts: &parts::Parts) -> Value {
     }
     if parts.on("skills") {
         tools.extend(skills::tool_defs());
+    }
+    if parts.on("title") {
+        tools.push(naming::tool_def());
     }
     let mut hooks: Vec<&str> = Vec::new();
     if parts.on("sessions")
@@ -858,6 +862,8 @@ fn handle(
                     questions::tool_call(host, params)
                 } else if name == secrets::TOOL_NAME && enabled.on("secrets") {
                     secrets::tool_call(host, params)
+                } else if name == naming::TOOL_NAME && enabled.on("title") {
+                    naming::tool_call(host, params)
                 } else if skills::TOOLS.contains(&name) && enabled.on("skills") {
                     skills::tool_call(name, params)
                 } else {
@@ -1032,6 +1038,7 @@ mod tests {
                 "skill",
                 "skills_search",
                 "skills_install",
+                "session_rename",
             ]
         );
         assert!(m["command_completions"]["/skills"].is_array());
