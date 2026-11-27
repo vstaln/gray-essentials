@@ -589,7 +589,7 @@ fn command_run(
         return permissions::command(name, gate, &argv);
     }
     if name == "/secrets" && parts.on("secrets") {
-        return secrets::command();
+        return secrets::command(host, &argv);
     }
     if name == skills::COMMAND && parts.on("skills") {
         return skills::command(params);
