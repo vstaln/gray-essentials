@@ -952,7 +952,7 @@ fn picker(skills: &[catalog::Skill], at: Option<&str>) -> Value {
         items.push(item);
     }
     let mut spec = json!({
-        "title": format!("Skills ({})", skills.len()),
+        "title": "Skills",
         "items": items,
         "enter": "use",
         "keys": [{ "key": " ", "label": "space on/off" }],
