@@ -215,7 +215,7 @@ fn raw_manifest() -> Value {
         "completion": ["set", "rm", "list", "exec", "elevate-setup"],
         "hooks": ["tool/before", "tool/after"],
         "required_hooks": ["tool/after"],
-        "capabilities": ["host.secret"],
+        "capabilities": ["host.ask"],
     })
 }
 
@@ -587,6 +587,8 @@ pub fn tool_after(params: &Value) -> Value {
     }
 }
 
+const SAVE_PERMANENTLY: &str = "Save permanently";
+
 pub fn tool_call(host: &Host, params: &Value) -> Value {
     let args = params.get("args").cloned().unwrap_or(Value::Null);
     let name = args
@@ -609,9 +611,27 @@ pub fn tool_call(host: &Host, params: &Value) -> Value {
         ));
     }
     util::audit(&sid, &name, "request", &purpose);
+    let question = if purpose.is_empty() {
+        format!("Secret {name}")
+    } else {
+        format!("Secret {name}\n{purpose}")
+    };
     let reply = match host.call(
-        "host/secret",
-        json!({"title": format!("Secret {name}"), "purpose": purpose, "allow_persist": true}),
+        "host/ask",
+        json!({
+            "blocking": true,
+            "questions": [{
+                "id": "secret",
+                "header": "Secret",
+                "question": question,
+                "options": [
+                    {"label": SAVE_PERMANENTLY, "description": "type or paste, kept in the system keyring", "freeform": true},
+                    {"label": "This session only", "description": "type or paste, forgotten when gray exits", "freeform": true},
+                ],
+                "no_other": true,
+                "secret": true,
+            }],
+        }),
         ASK_TTL,
     ) {
         Ok(v) => v,
@@ -619,17 +639,30 @@ pub fn tool_call(host: &Host, params: &Value) -> Value {
             util::audit(&sid, &name, "deny", "(no prompt)");
             if err.contains("capability_not_granted") {
                 return fail(format!(
-                    "gray-secrets may not open the masked prompt yet (the host.secret capability is not granted). Ask the user to run `gray plugin capabilities essentials --all`, or to run `gray secrets set {name}` in a terminal."
+                    "gray-secrets may not open the masked prompt yet (the host.ask capability is not granted). Ask the user to run `gray plugin capabilities essentials --all`, or to run `gray secrets set {name}` in a terminal."
                 ));
             }
             return fail(NO_PROMPT.replace("{name}", &name));
         }
     };
-    let value = reply.get("value").and_then(Value::as_str).unwrap_or("");
+    if reply.get("error").is_some() {
+        util::audit(&sid, &name, "deny", "(no prompt)");
+        return fail(NO_PROMPT.replace("{name}", &name));
+    }
+    let picked: Vec<&str> = reply
+        .pointer("/answers/secret/answers")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    let value = picked
+        .iter()
+        .find_map(|a| a.strip_prefix("user_note: "))
+        .unwrap_or("");
+    let persist = picked.contains(&SAVE_PERMANENTLY);
     let status = if value.is_empty() {
         util::audit(&sid, &name, "deny", "(declined)");
         "declined"
-    } else if reply.get("persist").and_then(Value::as_bool) == Some(true) {
+    } else if persist {
         if let Err(e) = store::store(&name, value) {
             return fail(format!("could not store {name} in the keyring: {e}"));
         }

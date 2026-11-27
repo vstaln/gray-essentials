@@ -479,14 +479,12 @@ fn manifest(parts: &parts::Parts) -> Value {
         || parts.on("export")
         || parts.on("setup")
         || parts.on("update")
+        || parts.on("secrets")
     {
         capabilities.push("host.ask");
     }
     if parts.on("cd") || parts.on("update") || parts.on("themes") {
         capabilities.push("host.restart");
-    }
-    if parts.on("secrets") {
-        capabilities.push("host.secret");
     }
     let required_hooks: Vec<&str> =
         if parts.on("secrets") || parts.on("guard") || parts.on("repguard") {
