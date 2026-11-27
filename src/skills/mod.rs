@@ -33,6 +33,10 @@ pub fn tool_defs() -> Vec<Value> {
     vec![
         json!({
             "name": "skill",
+            "direct": true,
+            "body": false,
+            "label": "Skill",
+            "preview": "name",
             "description": "Load a skill from the <available_skills> list and follow its instructions.",
             "parameters": {
                 "type": "object",
@@ -63,6 +67,7 @@ pub fn tool_defs() -> Vec<Value> {
         }),
         json!({
             "name": "skills_install",
+            "direct": true,
             "label": "Installed skill",
             "preview": "{source}",
             "description": "Install a skill pack into ~/.gray/skills/<name>/. Source may be an npm package name (or npm:<name>), owner/repo or owner/repo/sub/dir for GitHub (also gh:…, https://github.com/…, owner/repo@skill), or a URL to a raw SKILL.md. Refuses packs with no SKILL.md frontmatter.",
