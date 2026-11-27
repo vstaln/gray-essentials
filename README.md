@@ -93,7 +93,7 @@ The agent calls the `secret_request` tool with a name and a purpose. Gray shows 
 
 When there is no interactive terminal (print mode, gateway, Discord or Telegram sessions), the prompt is refused and the agent is told to ask the user to run `gray secrets set NAME` in a terminal. A value is never collected through a chat channel.
 
-The prompt needs the `host.secret` capability: `gray plugin capabilities essentials --all`.
+The prompt needs the `host.ask` capability: `gray plugin capabilities essentials --all`.
 
 ### Using a secret
 

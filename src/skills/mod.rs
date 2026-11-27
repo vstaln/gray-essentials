@@ -33,6 +33,10 @@ pub fn tool_defs() -> Vec<Value> {
     vec![
         json!({
             "name": "skill",
+            "direct": true,
+            "body": false,
+            "label": "Skill",
+            "preview": "name",
             "description": "Load a skill from the <available_skills> list and follow its instructions.",
             "parameters": {
                 "type": "object",
@@ -63,6 +67,7 @@ pub fn tool_defs() -> Vec<Value> {
         }),
         json!({
             "name": "skills_install",
+            "direct": true,
             "label": "Installed skill",
             "preview": "{source}",
             "description": "Install a skill pack into ~/.gray/skills/<name>/. Source may be an npm package name (or npm:<name>), owner/repo or owner/repo/sub/dir for GitHub (also gh:…, https://github.com/…, owner/repo@skill), or a URL to a raw SKILL.md. Refuses packs with no SKILL.md frontmatter.",
@@ -923,6 +928,75 @@ fn list_text(skills: &[catalog::Skill], state: &catalog::State) -> String {
     rows.join("\n")
 }
 
+fn picker(skills: &[catalog::Skill], at: Option<&str>) -> Value {
+    if skills.is_empty() {
+        return json!({ "text": "no skills discovered" });
+    }
+    let state = catalog::State::load();
+    let mut items = vec![json!({
+        "id": "all",
+        "label": "All skills",
+        "description": if state.off { "off" } else { "\u{2713} on" },
+    })];
+    for (i, s) in skills.iter().enumerate() {
+        let status = if state.disabled.contains(&s.name) {
+            "off \u{b7} "
+        } else if s.user_only {
+            "manual \u{b7} "
+        } else {
+            ""
+        };
+        let mut item = json!({
+            "id": format!("skill.{}", s.name),
+            "label": s.name,
+            "description": format!("{status}{}", clip(&s.description, 70)),
+        });
+        if i == 0 {
+            item["gap_before"] = json!(true);
+        }
+        items.push(item);
+    }
+    let mut spec = json!({
+        "title": "Skills",
+        "items": items,
+        "enter": "use",
+        "keys": [{ "key": " ", "label": "on/off" }],
+    });
+    if let Some(id) = at {
+        spec["selected_id"] = json!(id);
+        spec["cursor_only"] = json!(true);
+    }
+    json!({ "picker": spec })
+}
+
+fn on_pick(skills: &[catalog::Skill], pick: &str) -> Value {
+    let (id, key) = match pick.rsplit_once(':') {
+        Some((id, k)) if k.chars().count() == 1 => (id, k),
+        _ => (pick, ""),
+    };
+    let toggled = |msg: String, id: &str| {
+        if msg.starts_with('\u{2713}') {
+            picker(skills, Some(id))
+        } else {
+            json!({ "text": msg })
+        }
+    };
+    match (id, key) {
+        ("all", _) => toggled(set_off(!catalog::State::load().off), id),
+        (id, " ") => match id.strip_prefix("skill.") {
+            Some(name) => {
+                let off = catalog::State::load().disabled.contains(name);
+                toggled(set_disabled(skills, name, !off), id)
+            }
+            None => json!({ "text": "nothing to toggle there" }),
+        },
+        (id, _) => match id.strip_prefix("skill.") {
+            Some(name) => run_skill(skills, name, ""),
+            None => json!({ "text": "nothing picked" }),
+        },
+    }
+}
+
 fn set_off(off: bool) -> String {
     let mut state = catalog::State::load();
     state.off = off;
@@ -1017,7 +1091,8 @@ fn run_command(argv: &[&str], cwd: &Path) -> Value {
     let text = |t: String| json!({ "text": t });
     let shadowed = argv.len() == 1 && skills.iter().any(|s| s.name == argv[0]);
     match argv {
-        [] => text(list_text(&skills, &catalog::State::load())),
+        [] => picker(&skills, None),
+        ["--pick", .., id] => on_pick(&skills, id),
         ["list" | "ls"] if !shadowed => text(list_text(&skills, &catalog::State::load())),
         ["on" | "enable"] if !shadowed => text(set_off(false)),
         ["off" | "disable"] if !shadowed => text(set_off(true)),

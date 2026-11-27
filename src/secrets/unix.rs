@@ -215,7 +215,7 @@ fn raw_manifest() -> Value {
         "completion": ["set", "rm", "list", "exec", "elevate-setup"],
         "hooks": ["tool/before", "tool/after"],
         "required_hooks": ["tool/after"],
-        "capabilities": ["host.secret"],
+        "capabilities": ["host.ask"],
     })
 }
 
@@ -587,20 +587,92 @@ pub fn tool_after(params: &Value) -> Value {
     }
 }
 
+const SAVE_PERMANENTLY: &str = "Save permanently";
+const SESSION_ONLY: &str = "This session only";
+
+fn value_question(question: String) -> Value {
+    json!({
+        "id": "secret",
+        "header": "Secret",
+        "question": question,
+        "options": [
+            {"label": SAVE_PERMANENTLY, "freeform": true},
+            {"label": SESSION_ONLY, "freeform": true},
+        ],
+        "no_other": true,
+        "masked": true,
+    })
+}
+
+fn typed(reply: &Value, id: &str) -> (String, Vec<String>) {
+    let picked = crate::host::answer_labels(reply, id).unwrap_or_default();
+    let text = picked
+        .iter()
+        .find_map(|a| a.strip_prefix("user_note: "))
+        .unwrap_or("")
+        .to_string();
+    (text, picked)
+}
+
+fn ask(host: &Host, questions: Value) -> Result<Value, String> {
+    let reply = host.call(
+        "host/ask",
+        json!({"blocking": true, "questions": questions}),
+        ASK_TTL,
+    )?;
+    match reply.get("error").and_then(Value::as_str) {
+        Some(e) => Err(e.to_string()),
+        None => Ok(reply),
+    }
+}
+
+fn prompt_value(host: &Host, name: &str, purpose: &str) -> Result<Option<(String, bool)>, String> {
+    let question = if purpose.is_empty() {
+        format!("Secret {name}")
+    } else {
+        format!("Secret {name}\n{purpose}")
+    };
+    let reply = ask(host, json!([value_question(question)]))?;
+    let (value, picked) = typed(&reply, "secret");
+    if value.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some((value, picked.iter().any(|a| a == SAVE_PERMANENTLY))))
+}
+
+fn save(sid: &str, name: &str, value: &str, persist: bool) -> Result<&'static str, String> {
+    if persist {
+        store::store(name, value)
+            .map_err(|e| format!("could not store {name} in the keyring: {e}"))?;
+        let mut st = state();
+        st.session.remove(name);
+        st.remember(name, value);
+        drop(st);
+        util::audit(sid, name, "set", "(permanent)");
+        return Ok("stored");
+    }
+    if store::index().contains_key(name) {
+        store::clear(name)?;
+    }
+    let mut st = state();
+    st.session.insert(name.to_string(), value.to_string());
+    st.remember(name, value);
+    drop(st);
+    util::audit(sid, name, "set", "(session)");
+    Ok("session")
+}
+
 pub fn tool_call(host: &Host, params: &Value) -> Value {
     let args = params.get("args").cloned().unwrap_or(Value::Null);
-    let name = args
-        .get("name")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .trim()
-        .to_string();
-    let purpose = args
-        .get("purpose")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .trim()
-        .to_string();
+    let field = |k: &str| {
+        args.get(k)
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim()
+            .to_string()
+    };
+    let name = field("name");
+    let purpose = field("purpose");
     let sid = session_of(params);
     let fail = |text: String| json!({"content": text, "is_error": true});
     if !util::valid_name(&name) {
@@ -609,47 +681,233 @@ pub fn tool_call(host: &Host, params: &Value) -> Value {
         ));
     }
     util::audit(&sid, &name, "request", &purpose);
-    let reply = match host.call(
-        "host/secret",
-        json!({"title": format!("Secret {name}"), "purpose": purpose, "allow_persist": true}),
-        ASK_TTL,
-    ) {
-        Ok(v) => v,
+    let status = match prompt_value(host, &name, &purpose) {
         Err(err) => {
             util::audit(&sid, &name, "deny", "(no prompt)");
             if err.contains("capability_not_granted") {
                 return fail(format!(
-                    "gray-secrets may not open the masked prompt yet (the host.secret capability is not granted). Ask the user to run `gray plugin capabilities essentials --all`, or to run `gray secrets set {name}` in a terminal."
+                    "gray-secrets may not open the masked prompt yet (the host.ask capability is not granted). Ask the user to run `gray plugin capabilities essentials --all`, or to run `gray secrets set {name}` in a terminal."
                 ));
             }
             return fail(NO_PROMPT.replace("{name}", &name));
         }
-    };
-    let value = reply.get("value").and_then(Value::as_str).unwrap_or("");
-    let status = if value.is_empty() {
-        util::audit(&sid, &name, "deny", "(declined)");
-        "declined"
-    } else if reply.get("persist").and_then(Value::as_bool) == Some(true) {
-        if let Err(e) = store::store(&name, value) {
-            return fail(format!("could not store {name} in the keyring: {e}"));
+        Ok(None) => {
+            util::audit(&sid, &name, "deny", "(declined)");
+            "declined"
         }
-        state().remember(&name, value);
-        util::audit(&sid, &name, "set", "(permanent)");
-        "stored"
-    } else {
-        let mut st = state();
-        st.session.insert(name.clone(), value.to_string());
-        st.remember(&name, value);
-        drop(st);
-        util::audit(&sid, &name, "set", "(session)");
-        "session"
+        Ok(Some((value, persist))) => match save(&sid, &name, &value, persist) {
+            Ok(s) => s,
+            Err(e) => return fail(e),
+        },
     };
     json!({"content": json!({"name": name, "status": status}).to_string()})
 }
 
-pub fn command() -> Value {
-    let session: Vec<String> = state().session.keys().cloned().collect();
-    json!({"text": store::table(&session)})
+struct Entry {
+    name: String,
+    saved: bool,
+    created: Option<String>,
+    used: Option<String>,
+}
+
+fn entries() -> Vec<Entry> {
+    let index = store::index();
+    let field = |meta: &Value, k: &str| meta.get(k).and_then(Value::as_str).map(str::to_string);
+    let mut out: Vec<Entry> = index
+        .iter()
+        .map(|(name, meta)| Entry {
+            name: name.clone(),
+            saved: true,
+            created: field(meta, "created"),
+            used: field(meta, "last_used"),
+        })
+        .collect();
+    for name in state().session.keys().filter(|n| !index.contains_key(*n)) {
+        out.push(Entry {
+            name: name.clone(),
+            saved: false,
+            created: None,
+            used: None,
+        });
+    }
+    out
+}
+
+fn ago(iso: Option<&str>) -> String {
+    let Some(t) = iso.and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()) else {
+        return "never used".to_string();
+    };
+    let secs = (chrono::Utc::now() - t.with_timezone(&chrono::Utc))
+        .num_seconds()
+        .max(0);
+    match secs {
+        0..60 => "used just now".to_string(),
+        60..3600 => format!("used {}m ago", secs / 60),
+        3600..86400 => format!("used {}h ago", secs / 3600),
+        _ => format!("used {}d ago", secs / 86400),
+    }
+}
+
+fn lifetime(saved: bool) -> &'static str {
+    if saved { "saved" } else { "session" }
+}
+
+fn picker(at: Option<&str>) -> Value {
+    let list = entries();
+    let width = list.iter().map(|e| e.name.len()).max().unwrap_or(0);
+    let mut items: Vec<Value> = list
+        .iter()
+        .map(|e| {
+            json!({
+                "id": format!("s.{}", e.name),
+                "label": format!("{:<width$}", e.name),
+                "description": format!("{:<8} {}", lifetime(e.saved), ago(e.used.as_deref())),
+            })
+        })
+        .collect();
+    items.push(json!({"id": "new", "label": "+ Add secret", "gap_before": !list.is_empty()}));
+    let mut spec = json!({
+        "title": "Secrets",
+        "items": items,
+        "enter": "actions",
+        "keys": [{"key": "n", "label": "new"}, {"key": "d", "label": "delete"}],
+    });
+    if let Some(id) = at {
+        spec["selected_id"] = json!(id);
+        spec["cursor_only"] = json!(true);
+    }
+    json!({"picker": spec})
+}
+
+fn actions(name: &str) -> Value {
+    let Some(e) = entries().into_iter().find(|e| e.name == name) else {
+        return picker(None);
+    };
+    let mut info = vec![lifetime(e.saved).to_string()];
+    if let Some(day) = e
+        .created
+        .as_deref()
+        .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
+    {
+        info.push(format!("created {}", day.format("%b %-d")));
+    }
+    info.push(ago(e.used.as_deref()));
+    json!({"picker": {
+        "title": format!("{name}  {}", info.join(" \u{b7} ")),
+        "items": [
+            {"id": format!("replace.{name}"), "label": "Replace value"},
+            {"id": format!("life.{name}"), "label": if e.saved { "Make session only" } else { SAVE_PERMANENTLY }},
+            {"id": format!("delete.{name}"), "label": "Delete"},
+        ],
+    }})
+}
+
+fn confirm_delete(name: &str) -> Value {
+    json!({"picker": {
+        "title": format!("Delete {name}?"),
+        "items": [
+            {"id": format!("rm.{name}"), "label": "Delete"},
+            {"id": format!("keep.{name}"), "label": "Keep"},
+        ],
+    }})
+}
+
+fn delete(sid: &str, name: &str) -> Result<(), String> {
+    if store::index().contains_key(name) {
+        store::clear(name)?;
+    }
+    state().session.remove(name);
+    util::audit(sid, name, "rm", "(/secrets)");
+    Ok(())
+}
+
+fn switch_lifetime(sid: &str, name: &str) -> Result<(), String> {
+    let saved = store::index().contains_key(name);
+    let value = if saved {
+        store::lookup(name)
+    } else {
+        state().session.get(name).cloned()
+    }
+    .ok_or_else(|| format!("{name} has no value to move"))?;
+    save(sid, name, &value, !saved).map(|_| ())
+}
+
+fn add(host: &Host, sid: &str) -> Value {
+    let questions = json!([
+        {
+            "id": "name",
+            "header": "Name",
+            "question": "New secret",
+            "options": [{"label": "Name", "freeform": true}],
+            "no_other": true,
+        },
+        value_question("Value".to_string()),
+    ]);
+    let reply = match ask(host, questions) {
+        Ok(r) => r,
+        Err(e) => return json!({"text": format!("{} ({e})", NO_PROMPT.replace("{name}", "NAME"))}),
+    };
+    let name = typed(&reply, "name").0.trim().to_string();
+    let (value, picked) = typed(&reply, "secret");
+    if name.is_empty() && value.is_empty() {
+        return picker(None);
+    }
+    if !util::valid_name(&name) {
+        return json!({"text": format!("\u{2717} {name:?} is not a valid name: use letters, digits and underscores, starting with a letter")});
+    }
+    if value.is_empty() {
+        return json!({"text": format!("\u{2717} {name} was not saved: no value entered")});
+    }
+    match save(
+        sid,
+        &name,
+        &value,
+        picked.iter().any(|a| a == SAVE_PERMANENTLY),
+    ) {
+        Ok(_) => picker(Some(&format!("s.{name}"))),
+        Err(e) => json!({"text": format!("\u{2717} {e}")}),
+    }
+}
+
+fn on_pick(host: &Host, pick: &str) -> Value {
+    let sid = util::session_id();
+    let (id, key) = match pick.rsplit_once(':') {
+        Some((id, k)) if k.chars().count() == 1 => (id, k),
+        _ => (pick, ""),
+    };
+    let back = |name: &str, r: Result<(), String>| match r {
+        Ok(()) => picker(Some(&format!("s.{name}"))),
+        Err(e) => json!({"text": format!("\u{2717} {e}")}),
+    };
+    let (verb, name) = id.split_once('.').unwrap_or((id, ""));
+    match (verb, key) {
+        (_, "n") | ("new", _) => add(host, &sid),
+        ("s", "d") | ("delete", _) => confirm_delete(name),
+        ("s", _) => actions(name),
+        ("replace", _) => match prompt_value(host, name, "") {
+            Ok(Some((value, persist))) => back(name, save(&sid, name, &value, persist).map(|_| ())),
+            Ok(None) => picker(Some(&format!("s.{name}"))),
+            Err(_) => json!({"text": NO_PROMPT.replace("{name}", name)}),
+        },
+        ("life", _) => back(name, switch_lifetime(&sid, name)),
+        ("rm", _) => match delete(&sid, name) {
+            Ok(()) => picker(None),
+            Err(e) => json!({"text": format!("\u{2717} {e}")}),
+        },
+        ("keep", _) => picker(Some(&format!("s.{name}"))),
+        _ => picker(None),
+    }
+}
+
+pub fn command(host: &Host, argv: &[String]) -> Value {
+    match argv {
+        [flag, .., pick] if flag == "--pick" => on_pick(host, pick),
+        [list] if list == "list" || list == "ls" => {
+            let session: Vec<String> = state().session.keys().cloned().collect();
+            json!({"text": store::table(&session)})
+        }
+        _ => picker(None),
+    }
 }
 
 pub fn run_cli(args: &[String]) -> i32 {

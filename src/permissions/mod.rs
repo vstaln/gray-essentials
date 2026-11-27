@@ -12,7 +12,8 @@ use crate::settings;
 pub use core::ApprovalGate;
 use core::{
     APPROVAL_QUESTION_ID, LABEL_DENY, MODE_FULL, Outcome, Scope, approval_question, call_label,
-    decide_from_answers, host_is_headless, normalize_mode, run_permissions_command, save_rule,
+    decide_from_answers, host_is_headless, normalize_mode, permission_modes,
+    run_permissions_command, save_rule,
 };
 
 pub const COMMANDS: &[&str] = &["/permissions", "/perms", "/access", "/confirm", "/gate"];
@@ -123,9 +124,22 @@ pub fn command(name: &str, gate: &ApprovalGate, argv: &[String]) -> Value {
     }
     if argv.is_empty() {
         sync_persisted_mode(gate);
-        return json!({ "text": run_permissions_command(gate, argv) });
+        let items: Vec<Value> = permission_modes()
+            .into_iter()
+            .map(|(id, label, desc)| json!({ "id": id, "label": label, "description": desc }))
+            .collect();
+        return json!({ "picker": {
+            "title": "Permissions (all sessions)",
+            "items": items,
+            "selected_id": gate.mode(),
+        }});
     }
-    if let Some(clean) = argv.first().and_then(|m| normalize_mode(m)) {
+    let chosen = match argv {
+        [flag, .., pick] if flag == "--pick" => Some(pick.as_str()),
+        [mode, ..] => Some(mode.as_str()),
+        [] => None,
+    };
+    if let Some(clean) = chosen.and_then(normalize_mode) {
         MODE_PINNED.store(false, Ordering::Relaxed);
         gate.set_mode(clean);
         if let Err(e) = settings::set_choice("permissions_mode", clean) {

@@ -65,7 +65,7 @@ mod fallback {
         })
     }
 
-    pub fn command() -> Value {
+    pub fn command(_host: &Host, _argv: &[String]) -> Value {
         json!({"text": "gray-secrets is only supported on Unix systems."})
     }
 

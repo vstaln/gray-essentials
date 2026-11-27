@@ -479,14 +479,12 @@ fn manifest(parts: &parts::Parts) -> Value {
         || parts.on("export")
         || parts.on("setup")
         || parts.on("update")
+        || parts.on("secrets")
     {
         capabilities.push("host.ask");
     }
     if parts.on("cd") || parts.on("update") || parts.on("themes") {
         capabilities.push("host.restart");
-    }
-    if parts.on("secrets") {
-        capabilities.push("host.secret");
     }
     let required_hooks: Vec<&str> =
         if parts.on("secrets") || parts.on("guard") || parts.on("repguard") {
@@ -591,7 +589,7 @@ fn command_run(
         return permissions::command(name, gate, &argv);
     }
     if name == "/secrets" && parts.on("secrets") {
-        return secrets::command();
+        return secrets::command(host, &argv);
     }
     if name == skills::COMMAND && parts.on("skills") {
         return skills::command(params);
