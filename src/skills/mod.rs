@@ -960,7 +960,7 @@ fn picker(skills: &[catalog::Skill], at: Option<&str>) -> Value {
         "title": "Skills",
         "items": items,
         "enter": "use",
-        "keys": [{ "key": " ", "label": "space on/off" }],
+        "keys": [{ "key": " ", "label": "on/off" }],
     });
     if let Some(id) = at {
         spec["selected_id"] = json!(id);

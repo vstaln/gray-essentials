@@ -600,7 +600,7 @@ fn value_question(question: String) -> Value {
             {"label": SESSION_ONLY, "freeform": true},
         ],
         "no_other": true,
-        "secret": true,
+        "masked": true,
     })
 }
 
@@ -845,7 +845,7 @@ fn add(host: &Host, sid: &str) -> Value {
     ]);
     let reply = match ask(host, questions) {
         Ok(r) => r,
-        Err(_) => return json!({"text": NO_PROMPT.replace("{name}", "NAME")}),
+        Err(e) => return json!({"text": format!("{} ({e})", NO_PROMPT.replace("{name}", "NAME"))}),
     };
     let name = typed(&reply, "name").0.trim().to_string();
     let (value, picked) = typed(&reply, "secret");
