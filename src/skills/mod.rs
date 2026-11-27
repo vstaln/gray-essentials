@@ -934,10 +934,10 @@ fn picker(skills: &[catalog::Skill], at: Option<&str>) -> Value {
         "description": if state.off { "off" } else { "\u{2713} on" },
     })];
     for (i, s) in skills.iter().enumerate() {
-        let status = if s.user_only {
-            "manual \u{b7} "
-        } else if state.disabled.contains(&s.name) {
+        let status = if state.disabled.contains(&s.name) {
             "off \u{b7} "
+        } else if s.user_only {
+            "manual \u{b7} "
         } else {
             ""
         };

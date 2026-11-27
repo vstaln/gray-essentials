@@ -129,7 +129,7 @@ pub fn command(name: &str, gate: &ApprovalGate, argv: &[String]) -> Value {
             .map(|(id, label, desc)| json!({ "id": id, "label": label, "description": desc }))
             .collect();
         return json!({ "picker": {
-            "title": "Permissions",
+            "title": "Permissions (all sessions)",
             "items": items,
             "selected_id": gate.mode(),
         }});
