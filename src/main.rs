@@ -4,6 +4,7 @@ mod copy;
 mod detect;
 mod export;
 mod guard;
+mod handoff;
 mod host;
 mod hotkeys;
 mod intro;
@@ -121,6 +122,11 @@ const PARTS: &[parts::Part] = &[
         description: "change the working directory and resume here",
     },
     parts::Part {
+        name: "continue",
+        default: true,
+        description: "hand a chat off to a fresh session with /continue",
+    },
+    parts::Part {
         name: "copy",
         default: true,
         description: "copy the last reply to the clipboard",
@@ -221,6 +227,11 @@ const COMMANDS: &[(&str, &str, &str)] = &[
     ),
     ("usage", "/cost", "show token usage and cost estimates"),
     ("copy", "/copy", "copy the last reply to the clipboard"),
+    (
+        "continue",
+        "/continue",
+        "continue a chat in a fresh session",
+    ),
     (
         "export",
         "/export",
@@ -616,6 +627,7 @@ fn command_run(
     match name {
         "/cost" if parts.on("usage") => return usage::usage_command(&argv),
         "/copy" if parts.on("copy") => return copy::copy_command(&session),
+        "/continue" if parts.on("continue") => return handoff::command(params),
         "/export" if parts.on("export") => {
             return export::export_command(Some(host), &session, &argv);
         }
