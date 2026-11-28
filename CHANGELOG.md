@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.6.0] - 2026-11-28
+
+### Added
+- **`/continue` moved here from Gray core** as the `continue` part. It carries the current chat, a chat named by id or id prefix, or the latest chat in this directory into a fresh session with the last request, where it left off (markdown bold stripped), and a `kit recall` line for earlier turns. Extra words after the id are appended to the handoff.
+
 ## [0.5.0] - 2026-11-24
 
 ### Changed
